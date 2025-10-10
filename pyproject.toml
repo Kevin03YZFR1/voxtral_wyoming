@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voxtral-wyoming"
+version = "0.1.0"
+description = "Offline STT service using Mistral Voxtral models with Wyoming protocol compatibility"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Voxtral Wyoming Maintainers" }]
+license = { file = "LICENSE" }
+keywords = ["stt", "speech-to-text", "wyoming", "home-assistant", "voxtral"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "wyoming>=1.5.0",
+  "click>=8.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/voxtral_wyoming"
+Issues = "https://github.com/your-org/voxtral_wyoming/issues"
+
+[project.scripts]
+voxtral-wyoming = "voxtral_wyoming.server:cli"
+
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-q"
+testpaths = ["tests"]

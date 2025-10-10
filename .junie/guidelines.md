@@ -130,7 +130,7 @@ Note: We may start with a minimal runnable skeleton and iterate.
 - Keep CPU-only viable; add GPU acceleration paths where available to reduce latency.
 
 ## Roadmap (initial)
-1. Project scaffolding and runnable stub service (Wyoming server + placeholder transcriber interface). 
+1. Project scaffolding and runnable stub service (Wyoming server + placeholder transcriber interface).
 2. Integrate Voxtral local model runner; load weights from mounted volume; basic transcription.
 3. Improve audio preprocessing (resampling, chunking) and add optional VAD.
 4. Dockerize with sensible defaults, non-root user, and documented GPU options.
