@@ -1,4 +1,4 @@
-# Minimal runtime image for Voxtral Wyoming STT (stub)
+# Minimal runtime image for Voxtral Wyoming STT
 FROM python:3.11-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
