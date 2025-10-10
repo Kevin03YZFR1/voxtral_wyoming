@@ -270,10 +270,16 @@ class VoxtralTranscriber(ITranscriber):
             raise RuntimeError(f"Error encoding audio to base64: {e}") from e
 
         # Use apply_chat_template with base64 audio for proper multimodal processing
-        # This ensures the model properly initializes for audio-to-text transcription
+        # Add explicit transcription instruction to prevent conversational responses
         try:
             messages = [
-                {"role": "user", "content": [{"type": "audio", "base64": audio_base64}]}
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "audio", "base64": audio_base64},
+                        {"type": "text", "text": "Transcribe the audio exactly as spoken. Only provide the transcription, do not respond or answer."}
+                    ]
+                }
             ]
             model_inputs = self._processor.apply_chat_template(
                 messages,
