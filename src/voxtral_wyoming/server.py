@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from typing import Optional
 
 import click
@@ -110,6 +111,9 @@ async def _wyoming_handle_client(
                     audio.extend(audio_chunk.audio)
 
             elif AudioStop.is_type(event.type):
+                # Start timing for overall request processing
+                request_start = time.perf_counter()
+
                 # Clamp for safety and transcribe
                 spec = AudioSpec(sample_rate=sample_rate)
                 audio_pcm = clamp_audio_size(bytes(audio), spec, max_seconds=max_seconds)
@@ -124,6 +128,10 @@ async def _wyoming_handle_client(
                     lang_out = lang_hint
                 try:
                     await async_write_event(Transcript(text=text, language=lang_out).event(), writer)
+
+                    # Log overall request processing time
+                    request_time = time.perf_counter() - request_start
+                    _LOGGER.debug(f"Request processing completed in {request_time:.2f}s (client: {addr})")
                 except (ConnectionResetError, BrokenPipeError, OSError):
                     _LOGGER.info("Client disconnected before receiving Transcript: %s", addr)
                 break

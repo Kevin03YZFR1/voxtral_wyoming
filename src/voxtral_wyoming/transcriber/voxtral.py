@@ -17,6 +17,7 @@ provide VOXTRAL_MODEL_PATH to a directory on disk.
 """
 
 import os
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -233,6 +234,9 @@ class VoxtralTranscriber(ITranscriber):
 
         _logger = logging.getLogger("voxtral_wyoming.transcriber")
 
+        # Start timing for overall transcription
+        start_time = time.perf_counter()
+
         # Validate audio input - handle None case
         if audio_pcm is None:
             _logger.warning("Received None audio_pcm, returning empty transcription")
@@ -314,11 +318,15 @@ class VoxtralTranscriber(ITranscriber):
             "num_beams": 1,
         }
 
+        # Time the model inference
+        inference_start = time.perf_counter()
         with torch.inference_mode():
             outputs = self._model.generate(
                 **model_inputs,
                 **gen_kwargs,
             )
+        inference_time = time.perf_counter() - inference_start
+        _logger.debug(f"Model inference completed in {inference_time:.2f}s")
 
         _logger.debug(f"Generated outputs shape: {outputs.shape}")
         _logger.debug(f"Generated outputs sample (first 10 tokens): {outputs[0, :10].tolist()}")
@@ -354,6 +362,10 @@ class VoxtralTranscriber(ITranscriber):
         text = (decoded[0] if decoded else "").strip()
         _logger.info(f"Final transcription text (length={len(text)} chars): {text[:100]}{'...' if len(text) > 100 else ''}")
         duration = len(audio_pcm) / float(2 * max(1, sample_rate)) if audio_pcm else 0.0
+
+        # Log total transcription time
+        total_time = time.perf_counter() - start_time
+        _logger.debug(f"Total transcription time: {total_time * 1000:.2f}ms (audio duration: {duration:.2f}s)")
 
         return TranscriptionResult(
             text=text,
