@@ -63,51 +63,97 @@ def transcribe_sample(
     convert: bool = True,
 ) -> dict:
     """
-    Connects to a running voxtral-wyoming server, sends audio bytes, and returns the JSON response.
+    Connect to a running voxtral-wyoming server using the Wyoming protocol and return the transcript.
 
-    By default downloads the Obama sample MP3, attempts conversion to PCM16 (if ffmpeg is available),
-    and then streams the bytes to the server's stub protocol.
+    Flow: Describe -> Transcribe -> AudioStart -> AudioChunk* -> AudioStop -> Transcript
     """
+    # Lazy import to keep CLI startup fast and to avoid import cost if unused
+    from wyoming.event import write_event, read_event  # type: ignore
+    from wyoming.audio import AudioStart, AudioChunk, AudioStop  # type: ignore
+    from wyoming.asr import Transcribe, Transcript  # type: ignore
+    from wyoming.info import Describe  # type: ignore
+
     audio_bytes = _download(url)
     used_ffmpeg = False
     if convert:
         converted, used_ffmpeg = _maybe_convert_to_pcm16(audio_bytes, sample_rate=sample_rate)
         audio_bytes = converted
 
-    # Connect to server and send bytes
+    # Prepare audio format (expect PCM16 mono)
+    width = 2
+    channels = 1
+
+    # Connect to Wyoming server and speak protocol
     with socket.create_connection((host, port), timeout=10) as sock:
-        sock.sendall(audio_bytes)
+        # Use buffered file interfaces for wyoming.read_event/write_event
+        rfile = sock.makefile("rb")
+        wfile = sock.makefile("wb")
+
+        # 1) Ask for info (optional but useful)
+        write_event(Describe().event(), wfile)
+
+        # 2) Begin transcription session
+        write_event(Transcribe().event(), wfile)
+
+        # 3) Send audio start
+        write_event(AudioStart(rate=sample_rate, width=width, channels=channels).event(), wfile)
+
+        # 4) Stream audio chunks
+        chunk_size = 4096
+        for i in range(0, len(audio_bytes), chunk_size):
+            chunk = audio_bytes[i : i + chunk_size]
+            write_event(
+                AudioChunk(rate=sample_rate, width=width, channels=channels, audio=chunk).event(),
+                wfile,
+            )
+
+        # 5) Finish audio stream
+        write_event(AudioStop().event(), wfile)
+
+        # 6) Read events until we get a Transcript or connection closes
+        result_text: Optional[str] = None
+        result_language: Optional[str] = None
+        while True:
+            event = read_event(rfile)
+            if event is None:
+                break
+            if Transcript.is_type(event.type):
+                tr = Transcript.from_event(event)
+                result_text = tr.text
+                result_language = tr.language
+                break
+
+        # Close buffered files explicitly
         try:
-            sock.shutdown(socket.SHUT_WR)
+            wfile.flush()
         except Exception:
             pass
-        chunks = []
-        while True:
-            data = sock.recv(4096)
-            if not data:
-                break
-            chunks.append(data)
+        try:
+            rfile.close()
+            wfile.close()
+        except Exception:
+            pass
 
-    resp_raw = b"".join(chunks).strip()
-    # Allow servers to respond with JSON + newline
-    if b"\n" in resp_raw:
-        resp_raw = resp_raw.split(b"\n", 1)[0]
-
-    try:
-        resp_json = json.loads(resp_raw.decode("utf-8"))
-    except Exception:
-        # Fallback to plain text result if server didn't send JSON
-        resp_json = {"raw": resp_raw.decode("utf-8", errors="replace")}
+    # Build response JSON
+    resp_json: dict = {}
+    if result_text is not None:
+        resp_json["text"] = result_text
+        if result_language is not None:
+            resp_json["language"] = result_language
+    else:
+        resp_json["error"] = "No transcript received from server"
 
     # Annotate with client-side metadata
     resp_json.setdefault("_client", {})
-    resp_json["_client"].update({
-        "url": url,
-        "converted_pcm16": bool(convert and used_ffmpeg),
-        "sample_rate": sample_rate,
-        "host": host,
-        "port": port,
-    })
+    resp_json["_client"].update(
+        {
+            "url": url,
+            "converted_pcm16": bool(convert and used_ffmpeg),
+            "sample_rate": sample_rate,
+            "host": host,
+            "port": port,
+        }
+    )
 
     return resp_json
 
