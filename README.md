@@ -2,13 +2,15 @@
 
 Offline Speech-to-Text (STT) service using Mistral's Voxtral models with Wyoming protocol compatibility for Home Assistant Assist integration.
 
+The goal is to provide a powerful drop-in alternative to the popular Whisper STT option. Especially for non-English languages, Voxtral will hopefully set the new state of the art.
+
 ## Features
 
 - 🎯 **Offline-only**: Local inference with Mistral's Voxtral model files (no cloud APIs)
 - 🔌 **Wyoming Protocol**: Full compatibility with Home Assistant Assist
 - 🐳 **Docker Ready**: Containerized deployment with non-root user
-- 🎵 **Audio Format Support**: Automatic conversion of MP3, OGG, FLAC, WAV to PCM16 (requires ffmpeg)
 - ⚡ **Device Flexibility**: CPU, CUDA (NVIDIA), or MPS (Apple Silicon) support
+- 🎵 **Audio Format Support**: Automatic conversion of MP3, OGG, FLAC, WAV to PCM16 (requires ffmpeg)
 
 ## Docker Deployment
 
@@ -55,6 +57,8 @@ For easier deployment and configuration management, use Docker Compose:
    vim .env
    ```
 
+See the short configuration overview below or checkout the `.env.example` for detailed documentation of all options.
+
 3. **Start the service:**
    ```bash
    # Build and start in detached mode
@@ -63,14 +67,6 @@ For easier deployment and configuration management, use Docker Compose:
    # View logs
    docker compose logs -f
    ```
-
-**Configuration Options:**
-
-All settings can be configured via the `.env` file:
-- Server settings: `HOST`, `PORT`, `LANGUAGE`, `SAMPLE_RATE`, `MAX_SECONDS`, `LOG_LEVEL`
-- Model settings: `MODEL_ID`, `DEVICE`, `DATA_TYPE`, `MAX_NEW_TOKENS`
-
-See `.env.example` for detailed documentation of all options.
 
 **GPU Support:**
 
@@ -121,9 +117,8 @@ The Wyoming protocol is fully implemented and compatible with Home Assistant's A
 
 ## Configuration
 
-Configuration can be set via environment variables or CLI options:
+Configuration can be set via environment variables:
 
-### Server Configuration
 - `HOST` (default: 0.0.0.0) - Bind host
 - `PORT` (default: 10300) - Bind port
 - `LANGUAGE` (default: en-US) - Language/locale hint
@@ -134,6 +129,9 @@ Configuration can be set via environment variables or CLI options:
 - `MAX_SECONDS` (default: 60) - Maximum audio duration in seconds
 - `SAMPLE_RATE` (default: 16000) - Expected audio sample rate in Hz
 - `MAX_NEW_TOKENS` (default: 128) - Maximum generation length
+
+Checkout the `.env.example` for detailed documentation of all options.
+When directly executing python scripts without docker, you can also use equivalent command line arguments instead.
 
 ## Development
 
@@ -191,6 +189,11 @@ The client will automatically attempt to convert audio to PCM16 mono 16 kHz usin
 
 ## Troubleshooting
 
+### voxtral-wyoming exited with code 137
+The server process probably got killed by your OS or the docker engine as it was using too many resources. If you
+are using the dockerized version, you can try to use the python variant directly. Otherwise, you probably need to
+change settings on your local setup.
+
 ### Model Not Found
 
 If you see "model not found" errors:
@@ -221,6 +224,12 @@ If Home Assistant can't connect:
 2. Check firewall settings (port 10300 must be accessible)
 3. Verify network connectivity between Home Assistant and the server
 4. Check server logs for connection attempts
+
+## Performance
+I haven't done extensive performance tests yet, but on my RTX 3090 most STT requests are handled in less than a second while using ~18GB VRAM.
+
+## Online Alternative
+If you do not want to host Voxtral on your own, but rather use Mistral's online API, [ha-openai-whisper-stt-api is a nice HA addon provided by fabio-garavini](https://github.com/fabio-garavini/ha-openai-whisper-stt-api).
 
 ## Contributing
 
