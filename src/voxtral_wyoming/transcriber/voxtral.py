@@ -6,7 +6,7 @@ Offline-only execution that loads local model files (no network calls).
 
 Environment variables:
 - VOXTRAL_MODEL_DIR / VOXTRAL_MODEL_PATH: Local path to the Voxtral model dir (recommended)
-- VOXTRAL_DEVICE: cpu|cuda|mps (default: cpu)
+- VOXTRAL_DEVICE: cpu|cuda|mps (default: cuda), automatically falls back to cpu, if other device fails
 - VOXTRAL_DTYPE: fp32|fp16|bf16 (default: fp32)
 - VOXTRAL_LANGUAGE: locale like en-US (default: None → processor/model default)
 - VOXTRAL_MAX_NEW_TOKENS: generation length (default: 500)
@@ -27,7 +27,7 @@ from .base import ITranscriber, TranscriptionResult
 @dataclass
 class VoxtralConfig:
     model_path: Optional[str] = os.getenv("VOXTRAL_MODEL_PATH") or os.getenv("VOXTRAL_MODEL_DIR") or "mistralai/Voxtral-Mini-3B-2507"
-    device: str = os.getenv("VOXTRAL_DEVICE", "cpu")
+    device: str = os.getenv("VOXTRAL_DEVICE", "cuda")
     dtype: str = os.getenv("VOXTRAL_DTYPE", "fp32")
     language: Optional[str] = os.getenv("VOXTRAL_LANGUAGE")
     max_new_tokens: int = int(os.getenv("VOXTRAL_MAX_NEW_TOKENS", "128"))
