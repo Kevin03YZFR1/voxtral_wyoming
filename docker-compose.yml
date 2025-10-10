@@ -9,7 +9,8 @@ services:
       - "${PORT:-10300}:10300"
     environment:
       - HOST=${HOST:-0.0.0.0}
-      - PORT=${PORT:-10300}
+      # port _within_ the container needs to be stable
+      - PORT=10300
       - LANGUAGE=${LANGUAGE:-en-US}
       - SAMPLE_RATE=${SAMPLE_RATE:-16000}
       - MAX_SECONDS=${MAX_SECONDS:-60}
@@ -25,7 +26,6 @@ services:
 
       # Persist HuggingFace cache (optional)
       - huggingface_cache:/home/appuser/.cache/huggingface
-    restart: unless-stopped
 
     # Uncomment for NVIDIA GPU support
     # deploy:

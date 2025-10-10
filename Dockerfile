@@ -39,6 +39,4 @@ RUN uv sync --no-dev
 # Ensure virtualenv is on PATH for runtime
 ENV PATH="/app/.venv/bin:${PATH}"
 
-EXPOSE 10300
-
 CMD ["voxtral-wyoming"]
