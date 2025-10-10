@@ -103,7 +103,7 @@ class VoxtralTranscriber(ITranscriber):
         import torch  # type: ignore
 
         model_id = self.config.model_path
-        local_only = True  # Enforce offline loading
+        local_only = False  # Allow on-demand downloads
 
         # Resolve dtype
         self._dtype = _map_dtype(self._device, self.config.dtype)

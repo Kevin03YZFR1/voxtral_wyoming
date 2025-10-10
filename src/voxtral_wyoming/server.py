@@ -110,8 +110,15 @@ async def _wyoming_handle_client(
                 spec = AudioSpec(sample_rate=sample_rate)
                 audio_pcm = clamp_audio_size(bytes(audio), spec, max_seconds=max_seconds)
 
-                result = transcriber.transcribe(audio_pcm, sample_rate=sample_rate, language=lang_hint)
-                await async_write_event(Transcript(text=result.text or "", language=result.language).event(), writer)
+                try:
+                    result = transcriber.transcribe(audio_pcm, sample_rate=sample_rate, language=lang_hint)
+                    text = result.text or ""
+                    lang_out = result.language or lang_hint
+                except Exception as e:
+                    _LOGGER.exception("Transcription failed: %s", e)
+                    text = ""
+                    lang_out = lang_hint
+                await async_write_event(Transcript(text=text, language=lang_out).event(), writer)
                 break
 
             else:
