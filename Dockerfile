@@ -1,5 +1,5 @@
 # Minimal runtime image for Voxtral Wyoming STT
-FROM python:3.11-slim AS runtime
+FROM python:3.13-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -11,7 +11,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Install system dependencies and uv (global)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    tini \
     curl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
@@ -42,5 +41,4 @@ ENV PATH="/app/.venv/bin:${PATH}"
 
 EXPOSE 10300
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["voxtral-wyoming"]
