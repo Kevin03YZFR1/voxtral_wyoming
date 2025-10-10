@@ -60,6 +60,22 @@ Configuration can be set with CLI options or environment variables.
 - AUDIO_MAX_SECONDS (default: 60)
 - LOG_LEVEL (default: INFO)
 
+## Audio Format Handling
+
+The server supports automatic audio format conversion with a layered approach:
+
+1. **Client-side conversion (preferred)**: The sample client (`voxtral-wyoming-sample`) attempts to convert audio to PCM16 using ffmpeg if available. This reduces server load.
+
+2. **Server-side conversion (fallback)**: If the client sends non-PCM16 audio (e.g., MP3, OGG, FLAC, WAV), the server automatically detects the format and attempts conversion using ffmpeg.
+
+3. **Error handling**: If ffmpeg is not available on the server and non-PCM16 audio is received, a clear error message is returned with instructions.
+
+**Supported formats for auto-conversion**: MP3, OGG, FLAC, WAV (containerized), and other formats supported by ffmpeg.
+
+**Expected format**: Raw PCM16 mono (signed 16-bit little-endian, single channel, no header).
+
+**ffmpeg requirement**: For server-side auto-conversion to work, ffmpeg must be installed on the server. In Docker deployments, add ffmpeg to the container (see Docker section below).
+
 ### Using the Voxtral backend (offline)
 The Voxtral backend uses Mistral's Voxtral model locally. No network calls are made at runtime.
 
@@ -95,6 +111,17 @@ Run the container:
 ```bash
 docker run --rm -it -p 10300:10300 --name voxtral-wyoming voxtral-wyoming:early
 ```
+
+### Adding ffmpeg for audio format support
+
+To enable server-side audio format conversion (MP3, OGG, FLAC, etc.), add ffmpeg to your Dockerfile:
+
+```dockerfile
+# Add this to your Dockerfile before the Python dependencies
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+```
+
+Without ffmpeg, the server will only accept raw PCM16 audio and return an error for other formats (unless the client converts them first).
 
 ## Home Assistant (Wyoming)
 The CLI now recognizes `--protocol wyoming`, but actual Wyoming protocol handling is not implemented yet and will fall back to the stub behavior. Once complete, you will be able to add this service in Home Assistant via Settings → Voice Assistants → Add Wyoming service, pointing to the host and port configured above.
