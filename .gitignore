@@ -24,4 +24,6 @@ dist/
 # macOS
 .DS_Store
 
+# Environment-specific configuration
 .env
+docker-compose.override.yml
