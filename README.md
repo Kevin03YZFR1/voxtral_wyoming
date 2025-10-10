@@ -13,21 +13,21 @@ Offline Speech-to-Text (STT) service intended to run Mistral's Voxtral models an
 
 ## Install (dev)
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -U pip
-pip install -e .
+# Use uv's built-in virtual environment and dependency manager
+uv venv
+. .venv/bin/activate  # optional; you can also skip activation and use `uv run`
+uv sync
 ```
 
 ## Run (dev)
 ```bash
-voxtral-wyoming --host 0.0.0.0 --port 10300 --language en-US --sample-rate 16000 --protocol wyoming --backend dummy --max-seconds 60 --log-level INFO
+uv run voxtral-wyoming --host 0.0.0.0 --port 10300 --language en-US --sample-rate 16000 --protocol wyoming --backend dummy --max-seconds 60 --log-level INFO
 ```
 
 ### Quick test: transcribe a sample file
 With the server running in one terminal, in another terminal run:
 ```bash
-voxtral-wyoming-sample --host 127.0.0.1 --port 10300 \
+uv run voxtral-wyoming-sample --host 127.0.0.1 --port 10300 \
   --url https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3
 ```
 This downloads the sample MP3, tries to convert it to PCM16 mono 16 kHz using ffmpeg (if available),
@@ -100,8 +100,8 @@ docker run --rm -it -p 10300:10300 --name voxtral-wyoming voxtral-wyoming:early
 The CLI now recognizes `--protocol wyoming`, but actual Wyoming protocol handling is not implemented yet and will fall back to the stub behavior. Once complete, you will be able to add this service in Home Assistant via Settings → Voice Assistants → Add Wyoming service, pointing to the host and port configured above.
 
 ## Development
-- Code style: black + ruff (config in pyproject.toml)
-- Tests: pytest (minimal tests included)
+- Code style: black + ruff (config in pyproject.toml). Run with: `uvx black .` and `uvx ruff check .`
+- Tests: run with `uvx pytest -q` (or `uv run pytest -q` after `uv sync`).
 
 ## License
 MIT (see LICENSE)
