@@ -12,12 +12,12 @@ from .transcriber.base import ITranscriber
 from .audio import AudioSpec, clamp_audio_size
 
 # Environment variable defaults
-DEFAULT_HOST = os.getenv("WYOMING_HOST", "0.0.0.0")
-DEFAULT_PORT = int(os.getenv("WYOMING_PORT", "10300"))
-DEFAULT_LANGUAGE = os.getenv("VOXTRAL_LANGUAGE", "en-US")
-DEFAULT_SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", "16000"))
+DEFAULT_HOST = os.getenv("HOST", "0.0.0.0")
+DEFAULT_PORT = int(os.getenv("PORT", "10300"))
+DEFAULT_LANGUAGE = os.getenv("LANGUAGE", "en-US")
+DEFAULT_SAMPLE_RATE = int(os.getenv("SAMPLE_RATE", "16000"))
 DEFAULT_LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-DEFAULT_MAX_SECONDS = int(os.getenv("AUDIO_MAX_SECONDS", "60"))
+DEFAULT_MAX_SECONDS = int(os.getenv("MAX_SECONDS", "60"))
 
 _LOGGER = logging.getLogger("voxtral_wyoming")
 
@@ -170,18 +170,18 @@ async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: 
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
-@click.option("--host", envvar="WYOMING_HOST", default=DEFAULT_HOST, show_default=True, help="Bind host")
-@click.option("--port", envvar="WYOMING_PORT", default=DEFAULT_PORT, type=int, show_default=True, help="Bind port")
+@click.option("--host", envvar="HOST", default=DEFAULT_HOST, show_default=True, help="Bind host")
+@click.option("--port", envvar="PORT", default=DEFAULT_PORT, type=int, show_default=True, help="Bind port")
 @click.option(
     "--language",
-    envvar="VOXTRAL_LANGUAGE",
+    envvar="LANGUAGE",
     default=DEFAULT_LANGUAGE,
     show_default=True,
     help="Language/locale hint (e.g., en-US)",
 )
 @click.option(
     "--sample-rate",
-    envvar="AUDIO_SAMPLE_RATE",
+    envvar="SAMPLE_RATE",
     default=DEFAULT_SAMPLE_RATE,
     type=int,
     show_default=True,
@@ -189,7 +189,7 @@ async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: 
 )
 @click.option(
     "--max-seconds",
-    envvar="AUDIO_MAX_SECONDS",
+    envvar="MAX_SECONDS",
     default=DEFAULT_MAX_SECONDS,
     type=int,
     show_default=True,

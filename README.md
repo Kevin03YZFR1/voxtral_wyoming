@@ -36,7 +36,7 @@ docker run --rm -it --gpus all \
   -p 10300:10300 \
   -v /path/to/voxtral/models:/models:ro \
   -e MODEL_ID=/models/Voxtral-Mini-3B-2507 \
-  -e VOXTRAL_DEVICE=cuda \
+  -e DEVICE=cuda \
   voxtral-wyoming:latest
 ```
 
@@ -65,18 +65,16 @@ The Wyoming protocol is fully implemented and compatible with Home Assistant's A
 Configuration can be set via environment variables or CLI options:
 
 ### Server Configuration
-- `WYOMING_HOST` (default: 0.0.0.0) - Bind host
-- `WYOMING_PORT` (default: 10300) - Bind port
-- `VOXTRAL_LANGUAGE` (default: en-US) - Language/locale hint
-- `AUDIO_SAMPLE_RATE` (default: 16000) - Expected audio sample rate in Hz
-- `AUDIO_MAX_SECONDS` (default: 60) - Maximum audio duration in seconds
-- `LOG_LEVEL` (default: INFO) - Logging level
-
-### Voxtral Backend Configuration
+- `HOST` (default: 0.0.0.0) - Bind host
+- `PORT` (default: 10300) - Bind port
+- `LANGUAGE` (default: en-US) - Language/locale hint
 - `MODEL_ID` ID Voxtral model to use: "mistralai/Voxtral-Mini-3B-2507" (default) or "mistralai/Voxtral-Small-24B-2507" (or other compatible variant from Hugging Face)
-- `VOXTRAL_DEVICE` (default: cuda) - Device: cpu|cuda|mps (automatically falls back to CPU if device fails)
-- `VOXTRAL_DTYPE` (default: fp32) - Data type: fp32|fp16|bf16 (CPU forces fp32)
-- `VOXTRAL_MAX_NEW_TOKENS` (default: 128) - Maximum generation length
+- `DEVICE` (default: cuda) - Device: cpu|cuda|mps (automatically falls back to CPU if device fails)
+- `DATA_TYPE` (default: fp32) - Data type: fp32|fp16|bf16 (CPU forces fp32)
+- `LOG_LEVEL` (default: INFO) - Logging level
+- `MAX_SECONDS` (default: 60) - Maximum audio duration in seconds
+- `SAMPLE_RATE` (default: 16000) - Expected audio sample rate in Hz
+- `MAX_NEW_TOKENS` (default: 128) - Maximum generation length
 
 ## Development
 

@@ -16,10 +16,10 @@ from .base import ITranscriber, TranscriptionResult
 @dataclass
 class VoxtralConfig:
     model_id: Optional[str] = os.getenv("MODEL_ID", "mistralai/Voxtral-Mini-3B-2507")
-    device: str = os.getenv("VOXTRAL_DEVICE", "cuda")
-    dtype: str = os.getenv("VOXTRAL_DTYPE", "fp32")
-    language: Optional[str] = os.getenv("VOXTRAL_LANGUAGE")
-    max_new_tokens: int = int(os.getenv("VOXTRAL_MAX_NEW_TOKENS", "128"))
+    device: str = os.getenv("DEVICE", "cuda")
+    dtype: str = os.getenv("DATA_TYPE", "fp32")
+    language: Optional[str] = os.getenv("LANGUAGE")
+    max_new_tokens: int = int(os.getenv("MAX_NEW_TOKENS", "128"))
 
 
 def _locale_to_lang(locale: Optional[str]) -> Optional[str]:

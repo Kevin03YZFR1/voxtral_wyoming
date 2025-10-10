@@ -3,10 +3,10 @@ FROM python:3.11-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    WYOMING_HOST=0.0.0.0 \
-    WYOMING_PORT=10300 \
-    VOXTRAL_LANGUAGE=en-US \
-    AUDIO_SAMPLE_RATE=16000 \
+    HOST=0.0.0.0 \
+    PORT=10300 \
+    LANGUAGE=en-US \
+    SAMPLE_RATE=16000 \
     LOG_LEVEL=INFO
 
 # Install system dependencies and uv (global)
