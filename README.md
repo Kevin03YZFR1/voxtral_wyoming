@@ -12,37 +12,7 @@ The goal is to provide a powerful drop-in alternative to the popular Whisper STT
 - ⚡ **Device Flexibility**: CPU, CUDA (NVIDIA), or MPS (Apple Silicon) support
 - 🎵 **Audio Format Support**: Automatic conversion of MP3, OGG, FLAC, WAV to PCM16 (requires ffmpeg)
 
-## Docker Deployment
-
-### Building the Image
-
-```bash
-docker build -t voxtral-wyoming:latest .
-```
-
-### Running the Container
-
-```bash
-# Basic run
-docker run --rm -it -p 10300:10300 voxtral-wyoming:latest
-
-# With volume mount for Voxtral model
-docker run --rm -it \
-  -p 10300:10300 \
-  -v /path/to/voxtral/models:/models:ro \
-  -e MODEL_ID=/models/Voxtral-Mini-3B-2507 \
-  voxtral-wyoming:latest
-
-# With GPU support (NVIDIA)
-docker run --rm -it --gpus all \
-  -p 10300:10300 \
-  -v /path/to/voxtral/models:/models:ro \
-  -e MODEL_ID=/models/Voxtral-Mini-3B-2507 \
-  -e DEVICE=cuda \
-  voxtral-wyoming:latest
-```
-
-### Docker Compose Deployment (Recommended)
+## Docker Compose Deployment (Recommended)
 
 For easier deployment and configuration management, use Docker Compose:
 
@@ -95,25 +65,46 @@ volumes:
 
 Then set `MODEL_ID=/models/Voxtral-Mini-3B-2507` in your `.env` file.
 
-### Adding ffmpeg for Audio Format Support
+## Docker Deployment (Alternative without Docker Compose)
 
-To enable server-side audio format conversion, add ffmpeg to your Dockerfile:
+### Building the Image
 
-```dockerfile
-# Add this line after the base image declaration
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+```bash
+docker build -t voxtral-wyoming:latest .
+```
+
+### Running the Container
+
+```bash
+# Basic run
+docker run --rm -it -p 10300:10300 voxtral-wyoming:latest
+
+# With volume mount for Voxtral model
+docker run --rm -it \
+  -p 10300:10300 \
+  -v /path/to/voxtral/models:/models:ro \
+  -e MODEL_ID=/models/Voxtral-Mini-3B-2507 \
+  voxtral-wyoming:latest
+
+# With GPU support (NVIDIA)
+docker run --rm -it --gpus all \
+  -p 10300:10300 \
+  -v /path/to/voxtral/models:/models:ro \
+  -e MODEL_ID=/models/Voxtral-Mini-3B-2507 \
+  -e DEVICE=cuda \
+  voxtral-wyoming:latest
 ```
 
 ## Home Assistant Integration
 
-1. Start the Voxtral Wyoming server on your network (or in Docker)
-2. In Home Assistant, go to **Settings** → **Voice Assistants** → **Add Voice Assistant**
-3. Select **Wyoming Protocol**
-4. Enter the server host and port (e.g., `192.168.1.100:10300`)
-5. Select language and audio settings
-6. Test with Home Assistant Assist
+First of all, make sure that you've started the Voxtral Wyoming server as described above.
 
-The Wyoming protocol is fully implemented and compatible with Home Assistant's Assist feature.
+You don't need to install any HA addon, but just configure a new Wyoming integration:
+1. In Home Assistant, go to **Settings** → **Devices & services** → **Add integration**
+2. Select **Wyoming Protocol**
+3. Enter the server host and port as configured during your server setup and confirm
+
+Now you can choose `voxtral-wyoming` as the Speech-to-text option within any of your configured Assistants on **Settings** → **Voice assistants**.
 
 ## Configuration
 
@@ -208,6 +199,16 @@ If you see audio format errors:
    ```bash
    ffmpeg -i input.mp3 -f s16le -acodec pcm_s16le -ac 1 -ar 16000 output.pcm
    ```
+
+### Adding ffmpeg for Audio Format Support (Optional)
+
+To enable server-side audio format conversion, add ffmpeg to your Dockerfile:
+
+```dockerfile
+# Add this line after the base image declaration
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+```
+
 
 ### GPU Not Working
 
