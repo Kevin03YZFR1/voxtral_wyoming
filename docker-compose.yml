@@ -1,0 +1,40 @@
+services:
+  voxtral-wyoming:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: voxtral-wyoming:latest
+    container_name: voxtral-wyoming
+    ports:
+      - "${PORT:-10300}:10300"
+    environment:
+      - HOST=${HOST:-0.0.0.0}
+      # port _within_ the container needs to be stable
+      - PORT=10300
+      - LANGUAGE=${LANGUAGE:-en-US}
+      - SAMPLE_RATE=${SAMPLE_RATE:-16000}
+      - MAX_SECONDS=${MAX_SECONDS:-60}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MODEL_ID=${MODEL_ID:-mistralai/Voxtral-Mini-3B-2507}
+      - DEVICE=${DEVICE:-cuda}
+      - DATA_TYPE=${DATA_TYPE:-fp32}
+      - MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-128}
+    volumes:
+      # Mount local model directory (optional, for pre-downloaded models)
+      # Uncomment and adjust path if you have models stored locally
+      # - ./models:/models:ro
+
+      # Persist HuggingFace cache (optional)
+      - huggingface_cache:/home/appuser/.cache/huggingface
+
+    # Uncomment for NVIDIA GPU support
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  huggingface_cache:
