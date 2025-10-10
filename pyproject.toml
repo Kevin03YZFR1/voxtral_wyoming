@@ -9,13 +9,12 @@ description = "Offline STT service using Mistral Voxtral models with Wyoming pro
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Voxtral Wyoming Maintainers" }]
-license = { file = "LICENSE" }
+license = "MIT"
 keywords = ["stt", "speech-to-text", "wyoming", "home-assistant", "voxtral"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
 ]
 dependencies = [
