@@ -219,7 +219,7 @@ def cli(host: str, port: int, language: str, sample_rate: int, max_seconds: int,
     # Initialize Voxtral transcriber
     try:
         transcriber: ITranscriber = VoxtralTranscriber(VoxtralConfig())
-        _LOGGER.info("Using Voxtral transcriber backend")
+        _LOGGER.info("Voxtral transcriber initialization completed")
     except Exception as e:
         _LOGGER.exception("Failed to initialize Voxtral backend: %s", e)
         raise SystemExit(2)

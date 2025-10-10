@@ -187,6 +187,9 @@ class VoxtralTranscriber(ITranscriber):
         self._device = self.config.device
         self._dtype = None
 
+        # Preload everything on server startup to prevent slowing down first request
+        self._ensure_loaded()
+
     def _ensure_loaded(self) -> None:
         if self._loaded:
             return
