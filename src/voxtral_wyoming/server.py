@@ -87,7 +87,11 @@ async def _wyoming_handle_client(
                     models=[asr_model],
                     supports_transcript_streaming=False,
                 )
-                await async_write_event(Info(asr=[asr_program]).event(), writer)
+                try:
+                    await async_write_event(Info(asr=[asr_program]).event(), writer)
+                except (ConnectionResetError, BrokenPipeError, OSError):
+                    _LOGGER.info("Client disconnected during Info write: %s", addr)
+                    break
 
             elif Transcribe.is_type(event.type):
                 transcribe = Transcribe.from_event(event)
@@ -118,7 +122,10 @@ async def _wyoming_handle_client(
                     _LOGGER.exception("Transcription failed: %s", e)
                     text = ""
                     lang_out = lang_hint
-                await async_write_event(Transcript(text=text, language=lang_out).event(), writer)
+                try:
+                    await async_write_event(Transcript(text=text, language=lang_out).event(), writer)
+                except (ConnectionResetError, BrokenPipeError, OSError):
+                    _LOGGER.info("Client disconnected before receiving Transcript: %s", addr)
                 break
 
             else:

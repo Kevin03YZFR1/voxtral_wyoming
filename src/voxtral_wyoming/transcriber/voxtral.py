@@ -29,7 +29,7 @@ class VoxtralConfig:
     device: str = os.getenv("VOXTRAL_DEVICE", "cpu")
     dtype: str = os.getenv("VOXTRAL_DTYPE", "fp32")
     language: Optional[str] = os.getenv("VOXTRAL_LANGUAGE")
-    max_new_tokens: int = int(os.getenv("VOXTRAL_MAX_NEW_TOKENS", "500"))
+    max_new_tokens: int = int(os.getenv("VOXTRAL_MAX_NEW_TOKENS", "128"))
 
 
 def _locale_to_lang(locale: Optional[str]) -> Optional[str]:
@@ -113,9 +113,17 @@ class VoxtralTranscriber(ITranscriber):
         self._model = VoxtralForConditionalGeneration.from_pretrained(
             model_id,
             torch_dtype=self._dtype,
-            device_map=self._device,
             local_files_only=local_only,
         )
+        # Move to device explicitly and set eval mode
+        try:
+            if self._device:
+                self._model.to(self._device)
+        except Exception:
+            # Fallback to CPU if device move fails
+            self._device = "cpu"
+            self._model.to("cpu")
+        self._model.eval()
 
         self._loaded = True
 
@@ -125,29 +133,85 @@ class VoxtralTranscriber(ITranscriber):
 
         import torch  # type: ignore
 
-        # Prepare audio tensor
+        # Prepare audio as float32 numpy array in [-1, 1]
         wav = _pcm16_le_bytes_to_float32(audio_pcm)
         lang = _locale_to_lang(language or self.config.language)
 
-        # Build processor inputs. Voxtral processors accept dict with array + sampling_rate
-        inputs = self._processor.apply_transcription_request(
-            language=lang or "en",
-            audio={"array": wav, "sampling_rate": sample_rate},
-            model_id=self.config.model_path,
-        )
+        # Build processor inputs without relying on any file/path loading.
+        # Prefer a standard audio -> features call that accepts numpy arrays.
+        try:
+            if hasattr(self._processor, "feature_extractor"):
+                proc_inputs = self._processor.feature_extractor(
+                    wav, sampling_rate=sample_rate, return_tensors="pt"
+                )
+            else:
+                # Many processors are callable with (audio=..., sampling_rate=...)
+                proc_inputs = self._processor(
+                    audio=wav, sampling_rate=sample_rate, return_tensors="pt"
+                )
+        except Exception as e:
+            raise RuntimeError(f"Error preparing audio for model: {e}") from e
 
-        # Move to device / dtype
-        # Note: On CPU we keep fp32 for stability
-        inputs = inputs.to(self._device, dtype=self._dtype if self._device != "cpu" else torch.float32)
+        # Determine the expected model input key and move to device/dtype
+        if "input_features" in proc_inputs:
+            x = proc_inputs["input_features"].to(
+                self._device, dtype=self._dtype if self._device != "cpu" else torch.float32
+            )
+            model_inputs = {"input_features": x}
+        elif "input_values" in proc_inputs:
+            x = proc_inputs["input_values"].to(
+                self._device, dtype=self._dtype if self._device != "cpu" else torch.float32
+            )
+            model_inputs = {"input_values": x}
+        else:
+            # As a last resort, try to .to() the entire structure and pass through
+            try:
+                x_any = proc_inputs.to(
+                    self._device, dtype=self._dtype if self._device != "cpu" else torch.float32
+                )
+                model_inputs = dict(x_any)
+            except Exception as e:
+                raise RuntimeError(
+                    "Unsupported processor outputs for audio input; expected 'input_features' or 'input_values'"
+                ) from e
 
-        # Generate
-        outputs = self._model.generate(**inputs, max_new_tokens=self.config.max_new_tokens)
+        # Generate with CPU-friendly, deterministic settings
+        tokenizer = getattr(self._processor, "tokenizer", None)
+        eos_id = getattr(tokenizer, "eos_token_id", None) if tokenizer is not None else None
+        pad_id = getattr(tokenizer, "pad_token_id", None) if tokenizer is not None else None
+        if pad_id is None and eos_id is not None:
+            pad_id = eos_id
 
-        # Decode only the newly generated tokens after the prompt length
-        prompt_len = inputs.input_ids.shape[1] if hasattr(inputs, "input_ids") else 0
-        decoded = self._processor.batch_decode(outputs[:, prompt_len:], skip_special_tokens=True)
+        gen_kwargs = {
+            "max_new_tokens": self.config.max_new_tokens,
+            "do_sample": False,
+            "num_beams": 1,
+        }
+        if eos_id is not None:
+            gen_kwargs["eos_token_id"] = eos_id
+        if pad_id is not None:
+            gen_kwargs["pad_token_id"] = pad_id
+
+        with torch.inference_mode():
+            outputs = self._model.generate(
+                **model_inputs,
+                **gen_kwargs,
+            )
+
+        # Decode tokens
+        try:
+            decoded = self._processor.batch_decode(
+                outputs, skip_special_tokens=True
+            )
+        except Exception:
+            decoded = []
 
         text = (decoded[0] if decoded else "").strip()
         duration = len(audio_pcm) / float(2 * max(1, sample_rate)) if audio_pcm else 0.0
 
-        return TranscriptionResult(text=text, language=language or self.config.language or "en-US", duration_sec=duration, confidence=None)
+        return TranscriptionResult(
+            text=text,
+            language=language or self.config.language or "en-US",
+            duration_sec=duration,
+            confidence=None,
+        )

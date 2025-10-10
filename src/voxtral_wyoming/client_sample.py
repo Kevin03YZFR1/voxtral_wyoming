@@ -85,6 +85,11 @@ def transcribe_sample(
 
     # Connect to Wyoming server and speak protocol
     with socket.create_connection((host, port), timeout=10) as sock:
+        # Disable socket timeout for long-running transcription
+        try:
+            sock.settimeout(None)
+        except Exception:
+            pass
         # Use buffered file interfaces for wyoming.read_event/write_event
         rfile = sock.makefile("rb")
         wfile = sock.makefile("wb")
