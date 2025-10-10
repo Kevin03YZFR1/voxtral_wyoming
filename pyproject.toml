@@ -29,6 +29,7 @@ Issues = "https://github.com/your-org/voxtral_wyoming/issues"
 
 [project.scripts]
 voxtral-wyoming = "voxtral_wyoming.server:cli"
+voxtral-wyoming-sample = "voxtral_wyoming.client_sample:main"
 
 [tool.black]
 line-length = 100

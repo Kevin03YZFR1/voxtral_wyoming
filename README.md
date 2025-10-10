@@ -24,6 +24,17 @@ pip install -e .
 voxtral-wyoming --host 0.0.0.0 --port 10300 --language en-US --sample-rate 16000 --protocol wyoming --backend dummy --max-seconds 60 --log-level INFO
 ```
 
+### Quick test: transcribe a sample file
+With the server running in one terminal, in another terminal run:
+```bash
+voxtral-wyoming-sample --host 127.0.0.1 --port 10300 \
+  --url https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3
+```
+This downloads the sample MP3, tries to convert it to PCM16 mono 16 kHz using ffmpeg (if available),
+sends it to the server, and prints the transcript from the server's response.
+
+If ffmpeg is not available, the script will send the MP3 bytes as-is (works with the stub server). Use `--no-convert` to explicitly skip conversion.
+
 The server currently falls back to a simple stub behavior: it accepts a TCP connection, reads bytes until the client closes the socket, and returns a one-line JSON response containing a fixed transcript.
 
 Example client:
