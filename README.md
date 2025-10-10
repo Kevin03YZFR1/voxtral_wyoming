@@ -3,8 +3,9 @@
 Offline Speech-to-Text (STT) service intended to run Mistral's Voxtral models and expose a Wyoming-compatible interface for Home Assistant Assist. This version provides a runnable server with a stub protocol and transcriber; the full Wyoming protocol and Voxtral backend integration will follow.
 
 ## Status
-- Phase 1 (this release): runnable skeleton with a stub transcriber and a simple TCP server; CLI supports selecting `--protocol wyoming|stub` (wyoming currently falls back to stub).
-- Next steps: implement Wyoming protocol handling using the `wyoming` Python package and integrate a local Voxtral model backend.
+- Phase 1 (this release): runnable server with a stub protocol and an optional Voxtral backend. Wyoming protocol option is recognized but still falls back to stub behavior.
+- Voxtral backend: implemented for offline local inference with Mistral's Voxtral model files (no Whisper, no cloud calls).
+- Next steps: implement full Wyoming protocol handling using the `wyoming` Python package.
 
 ## Requirements
 - Python 3.11+
@@ -47,6 +48,31 @@ Configuration can be set with CLI options or environment variables.
 - VOXTRAL_BACKEND (default: dummy)  # dummy|voxtral
 - AUDIO_MAX_SECONDS (default: 60)
 - LOG_LEVEL (default: INFO)
+
+### Using the Voxtral backend (offline)
+The Voxtral backend uses Mistral's Voxtral model locally. No network calls are made at runtime.
+
+Requirements when using `--backend voxtral`:
+- Install dependencies: torch, transformers, numpy (not installed by default).
+- Have the model files available locally either in the HF cache or at a directory path.
+
+Key environment variables:
+- VOXTRAL_MODEL_PATH or VOXTRAL_MODEL_DIR: local path to the Voxtral model directory (recommended), e.g. `/models/Voxtral-Mini-3B-2507`
+- VOXTRAL_DEVICE: cpu|cuda|mps (default: cpu)
+- VOXTRAL_DTYPE: fp32|fp16|bf16 (default: fp32; CPU forces fp32)
+- VOXTRAL_MAX_NEW_TOKENS: default 500
+
+Example run:
+```bash
+VOXTRAL_BACKEND=voxtral \
+VOXTRAL_MODEL_PATH=/models/Voxtral-Mini-3B-2507 \
+VOXTRAL_DEVICE=cpu \
+voxtral-wyoming --protocol stub --language en-US --sample-rate 16000
+```
+
+Notes:
+- Loading uses `local_files_only=True`. If you supply a repo ID instead of a path, ensure the model is already present in your local HF cache.
+- Audio input is expected as PCM16 mono. The server stub reads raw bytes from the TCP connection; the Wyoming protocol will be added later.
 
 ## Docker
 Build the image:

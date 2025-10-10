@@ -141,7 +141,7 @@ async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: 
     default=DEFAULT_BACKEND,
     type=click.Choice(["dummy", "voxtral"], case_sensitive=False),
     show_default=True,
-    help="Transcription backend to use (voxtral not implemented yet)",
+    help="Transcription backend to use",
 )
 @click.option(
     "--max-seconds",
@@ -181,9 +181,12 @@ def cli(host: str, port: int, language: str, sample_rate: int, protocol: str, ba
     backend_lower = backend.lower()
     transcriber: ITranscriber
     if backend_lower == "voxtral":
-        _LOGGER.warning("Voxtral backend selected but not yet implemented; falling back to dummy transcriber")
-        transcriber = DummyTranscriber(text="Hello from Voxtral Wyoming stub", language=language)
-        # In a future iteration, replace with: VoxtralTranscriber(VoxtralConfig())
+        try:
+            transcriber = VoxtralTranscriber(VoxtralConfig())
+            _LOGGER.info("Using Voxtral transcriber backend")
+        except Exception as e:
+            _LOGGER.exception("Failed to initialize Voxtral backend (%s). Falling back to dummy transcriber.", e)
+            transcriber = DummyTranscriber(text="voxtral backend init failed", language=language)
     else:
         transcriber = DummyTranscriber(text="Hello from Voxtral Wyoming stub", language=language)
 
