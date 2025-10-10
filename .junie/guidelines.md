@@ -54,18 +54,6 @@ Because model distribution and runtimes may evolve, we will keep the approach mo
 
 We will NOT use cloud APIs. The container should be able to run fully offline once the model files are present on disk.
 
-## Configuration
-- Environment variables (recommended):
-  - `WYOMING_HOST` (default `0.0.0.0`)
-  - `WYOMING_PORT` (default `10300`)
-  - `VOXTRAL_MODEL_DIR` or `VOXTRAL_MODEL_PATH` (mount into container)
-  - `VOXTRAL_DEVICE` (`cpu`/`cuda`/`mps`)
-  - `VOXTRAL_DTYPE` (`fp32`/`fp16`/`bf16`)
-  - `VOXTRAL_LANGUAGE` (e.g., `en-US`)
-  - `AUDIO_SAMPLE_RATE` (default `16000`)
-  - `LOG_LEVEL` (`INFO` by default)
-- Config file support (optional): `config.yml` or flags for CLI entrypoint.
-
 ## Docker and Compose
 - Single-service container by default (STT server). Add Compose if we later split components (e.g., a model downloader or cache service).
 - Suggested base: `python:3.11-slim` (or `3.12-slim` once runtimes confirm support).

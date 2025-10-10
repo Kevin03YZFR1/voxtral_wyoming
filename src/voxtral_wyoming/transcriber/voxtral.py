@@ -3,17 +3,6 @@ from __future__ import annotations
 """Voxtral-backed transcriber implementation using Mistral's Voxtral model.
 
 Offline-only execution that loads local model files (no network calls).
-
-Environment variables:
-- VOXTRAL_MODEL_DIR / VOXTRAL_MODEL_PATH: Local path to the Voxtral model dir (recommended)
-- VOXTRAL_DEVICE: cpu|cuda|mps (default: cuda), automatically falls back to cpu, if other device fails
-- VOXTRAL_DTYPE: fp32|fp16|bf16 (default: fp32)
-- VOXTRAL_LANGUAGE: locale like en-US (default: None → processor/model default)
-- VOXTRAL_MAX_NEW_TOKENS: generation length (default: 500)
-
-Note: If a Hugging Face repo ID is provided instead of a path, loading will still
-use local_files_only=True. Ensure the model is present in the local HF cache or
-provide VOXTRAL_MODEL_PATH to a directory on disk.
 """
 
 import os
@@ -26,7 +15,7 @@ from .base import ITranscriber, TranscriptionResult
 
 @dataclass
 class VoxtralConfig:
-    model_path: Optional[str] = os.getenv("VOXTRAL_MODEL_PATH") or os.getenv("VOXTRAL_MODEL_DIR") or "mistralai/Voxtral-Mini-3B-2507"
+    model_id: Optional[str] = os.getenv("MODEL_ID", "mistralai/Voxtral-Mini-3B-2507")
     device: str = os.getenv("VOXTRAL_DEVICE", "cuda")
     dtype: str = os.getenv("VOXTRAL_DTYPE", "fp32")
     language: Optional[str] = os.getenv("VOXTRAL_LANGUAGE")
@@ -203,7 +192,8 @@ class VoxtralTranscriber(ITranscriber):
 
         import torch  # type: ignore
 
-        model_id = self.config.model_path
+        model_id = self.config.model_id
+
         # Allow downloading from HuggingFace if model is not in local cache
         # Set VOXTRAL_LOCAL_ONLY=true to enforce strict offline mode
         local_only = os.getenv("VOXTRAL_LOCAL_ONLY", "false").lower() == "true"
@@ -289,7 +279,7 @@ class VoxtralTranscriber(ITranscriber):
             model_inputs = self._processor.apply_transcription_request(
                 language=lang or "en",
                 audio=wav,
-                model_id=self.config.model_path,
+                model_id=self.config.model_id,
                 sampling_rate=sample_rate,
                 format=["wav"]  # WAV is the container format for PCM audio data
             )

@@ -28,14 +28,14 @@ docker run --rm -it -p 10300:10300 voxtral-wyoming:latest
 docker run --rm -it \
   -p 10300:10300 \
   -v /path/to/voxtral/models:/models:ro \
-  -e VOXTRAL_MODEL_PATH=/models/Voxtral-Mini-3B-2507 \
+  -e MODEL_ID=/models/Voxtral-Mini-3B-2507 \
   voxtral-wyoming:latest
 
 # With GPU support (NVIDIA)
 docker run --rm -it --gpus all \
   -p 10300:10300 \
   -v /path/to/voxtral/models:/models:ro \
-  -e VOXTRAL_MODEL_PATH=/models/Voxtral-Mini-3B-2507 \
+  -e MODEL_ID=/models/Voxtral-Mini-3B-2507 \
   -e VOXTRAL_DEVICE=cuda \
   voxtral-wyoming:latest
 ```
@@ -73,7 +73,7 @@ Configuration can be set via environment variables or CLI options:
 - `LOG_LEVEL` (default: INFO) - Logging level
 
 ### Voxtral Backend Configuration
-- `VOXTRAL_MODEL_PATH` or `VOXTRAL_MODEL_DIR` - Local path to Voxtral model directory (e.g., `/models/Voxtral-Mini-3B-2507`)
+- `MODEL_ID` ID Voxtral model to use: "mistralai/Voxtral-Mini-3B-2507" (default) or "mistralai/Voxtral-Small-24B-2507" (or other compatible variant from Hugging Face)
 - `VOXTRAL_DEVICE` (default: cuda) - Device: cpu|cuda|mps (automatically falls back to CPU if device fails)
 - `VOXTRAL_DTYPE` (default: fp32) - Data type: fp32|fp16|bf16 (CPU forces fp32)
 - `VOXTRAL_MAX_NEW_TOKENS` (default: 128) - Maximum generation length
@@ -149,7 +149,7 @@ uv run pytest --cov=voxtral_wyoming --cov-report=term-missing
 ### Model Not Found
 
 If you see "model not found" errors:
-1. Ensure `VOXTRAL_MODEL_PATH` points to a valid model directory
+1. Ensure `MODEL_ID` points to a valid model id from Hugging Face
 2. Or ensure the model is in your HuggingFace cache (run `huggingface-cli download mistralai/Voxtral-Mini-3B-2507`)
 3. Set `VOXTRAL_LOCAL_ONLY=true` to prevent accidental downloads
 
