@@ -209,7 +209,7 @@ class VoxtralTranscriber(ITranscriber):
         self._processor = AutoProcessor.from_pretrained(model_id, local_files_only=local_only)
         self._model = VoxtralForConditionalGeneration.from_pretrained(
             model_id,
-            torch_dtype=self._dtype,
+            dtype=self._dtype,
             local_files_only=local_only,
         )
         # Move to device explicitly and set eval mode
