@@ -27,3 +27,19 @@ def clamp_audio_size(audio: bytes, spec: AudioSpec, max_seconds: int = 60) -> by
     if len(audio) > max_bytes:
         return audio[:max_bytes]
     return audio
+
+
+def pcm16_duration_seconds(length_bytes: int, sample_rate: int, channels: int = 1) -> float:
+    """Compute duration in seconds for PCM16 audio by length.
+
+    Args:
+        length_bytes: Number of bytes in the PCM16 buffer.
+        sample_rate: Samples per second.
+        channels: Number of channels (default 1 = mono).
+    """
+    if sample_rate <= 0 or channels <= 0:
+        return 0.0
+    bytes_per_second = sample_rate * channels * 2  # PCM16 = 2 bytes per sample
+    if bytes_per_second == 0:
+        return 0.0
+    return length_bytes / bytes_per_second
