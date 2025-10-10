@@ -189,17 +189,6 @@ python examples/client_sample.py \
 
 The client will automatically attempt to convert audio to PCM16 mono 16 kHz using ffmpeg if available.
 
-
-### Running Tests
-
-```bash
-# Run all tests
-uv run pytest
-
-# Run with coverage
-uv run pytest --cov=voxtral_wyoming --cov-report=term-missing
-```
-
 ## Troubleshooting
 
 ### Model Not Found
