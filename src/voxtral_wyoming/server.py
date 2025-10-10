@@ -22,86 +22,130 @@ DEFAULT_MAX_SECONDS = int(os.getenv("AUDIO_MAX_SECONDS", "60"))
 _LOGGER = logging.getLogger("voxtral_wyoming")
 
 
-async def _wyoming_handle_stream(
-    stream,
+async def _wyoming_handle_client(
+    reader: asyncio.StreamReader,
+    writer: asyncio.StreamWriter,
     *,
     language: str,
     default_sample_rate: int,
     transcriber: ITranscriber,
     max_seconds: int,
 ) -> None:
-    """Handle a single Wyoming stream for ASR.
+    """Handle a single Wyoming TCP connection for ASR.
 
-    Expects an AudioStart → zero or more AudioChunk → AudioStop sequence,
-    optionally preceded by a Transcribe request. Sends a Transcript response.
+    Expects Describe? → Transcribe? → AudioStart → AudioChunk* → AudioStop,
+    and responds with Info (optional) and a final Transcript.
     """
+    addr = writer.get_extra_info("peername")
+    _LOGGER.debug("Client connected from %s", addr)
+
     try:
         # Lazy imports to keep module import cheap
+        from wyoming.event import async_read_event, async_write_event  # type: ignore
         from wyoming.audio import AudioStart, AudioChunk, AudioStop  # type: ignore
         from wyoming.asr import Transcribe, Transcript  # type: ignore
+        from wyoming.info import Describe, Info, AsrProgram, AsrModel, Attribution  # type: ignore
+        from voxtral_wyoming import __version__ as VW_VERSION  # local version
     except Exception as e:  # pragma: no cover - environment dependent
         _LOGGER.exception("Wyoming package not available or incompatible: %s", e)
-        await stream.close()
-        return
+        try:
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            return
 
     audio = bytearray()
     sample_rate = default_sample_rate
+    lang_hint = language
 
-    while True:
-        message = await stream.receive()
-        if message is None:
-            break
+    try:
+        while True:
+            event = await async_read_event(reader)
+            if event is None:
+                break
 
-        if isinstance(message, AudioStart):
-            # Prefer rate from client if provided
-            sample_rate = getattr(message, "rate", sample_rate) or sample_rate
-        elif isinstance(message, AudioChunk):
-            chunk = getattr(message, "audio", b"")
-            if chunk:
-                audio.extend(chunk)
-        elif isinstance(message, AudioStop):
-            # Clamp for safety and transcribe
-            spec = AudioSpec(sample_rate=sample_rate)
-            audio_pcm = clamp_audio_size(bytes(audio), spec, max_seconds=max_seconds)
+            if Describe.is_type(event.type):
+                # Reply with minimal info about this ASR service
+                attribution = Attribution(
+                    name="Voxtral Wyoming",
+                    url="https://github.com/your-org/voxtral_wyoming",
+                )
+                asr_model = AsrModel(
+                    name="voxtral",
+                    attribution=attribution,
+                    installed=True,
+                    description="Offline STT with Mistral Voxtral",
+                    version=VW_VERSION,
+                    languages=[lang_hint],
+                )
+                asr_program = AsrProgram(
+                    name="voxtral-wyoming",
+                    attribution=attribution,
+                    installed=True,
+                    description="Wyoming-compatible STT service",
+                    version=VW_VERSION,
+                    models=[asr_model],
+                    supports_transcript_streaming=False,
+                )
+                await async_write_event(Info(asr=[asr_program]).event(), writer)
 
-            result = transcriber.transcribe(audio_pcm, sample_rate=sample_rate, language=language)
-            await stream.send(Transcript(text=result.text or ""))
-            await stream.close()
-            break
-        elif isinstance(message, Transcribe):
-            # Trigger received; actual audio will follow
-            continue
-        else:
-            # Ignore other messages
-            continue
+            elif Transcribe.is_type(event.type):
+                transcribe = Transcribe.from_event(event)
+                if transcribe.language:
+                    lang_hint = transcribe.language
+
+            elif AudioStart.is_type(event.type):
+                audio_start = AudioStart.from_event(event)
+                # Prefer rate from client if provided
+                sample_rate = getattr(audio_start, "rate", sample_rate) or sample_rate
+                # Note: We expect width=2, channels=1 (PCM16 mono)
+
+            elif AudioChunk.is_type(event.type):
+                audio_chunk = AudioChunk.from_event(event)
+                if audio_chunk.audio:
+                    audio.extend(audio_chunk.audio)
+
+            elif AudioStop.is_type(event.type):
+                # Clamp for safety and transcribe
+                spec = AudioSpec(sample_rate=sample_rate)
+                audio_pcm = clamp_audio_size(bytes(audio), spec, max_seconds=max_seconds)
+
+                result = transcriber.transcribe(audio_pcm, sample_rate=sample_rate, language=lang_hint)
+                await async_write_event(Transcript(text=result.text or "", language=result.language).event(), writer)
+                break
+
+            else:
+                # Ignore other messages
+                continue
+    finally:
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except Exception:
+            pass
+        _LOGGER.debug("Client disconnected: %s", addr)
 
 
 async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: int, transcriber: ITranscriber, max_seconds: int) -> None:
-    """Run a Wyoming TCP server that handles ASR streams."""
-    try:
-        from wyoming.transport.tcp import TcpServer  # type: ignore
-    except Exception as e:  # pragma: no cover - environment-dependent
-        _LOGGER.exception("Wyoming TCP transport not available: %s", e)
-        raise
-
-    server = TcpServer(host=host, port=port)
-    await server.start()
+    """Run a Wyoming TCP server over asyncio that handles ASR streams."""
+    server = await asyncio.start_server(
+        lambda r, w: _wyoming_handle_client(
+            r,
+            w,
+            language=language,
+            default_sample_rate=sample_rate,
+            transcriber=transcriber,
+            max_seconds=max_seconds,
+        ),
+        host,
+        port,
+    )
 
     addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets or [])
     _LOGGER.info("Wyoming server listening on %s", addrs)
 
     async with server:
-        async for stream in server:
-            # Handle each stream concurrently
-            asyncio.create_task(
-                _wyoming_handle_stream(
-                    stream,
-                    language=language,
-                    default_sample_rate=sample_rate,
-                    transcriber=transcriber,
-                    max_seconds=max_seconds,
-                )
-            )
+        await server.serve_forever()
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
