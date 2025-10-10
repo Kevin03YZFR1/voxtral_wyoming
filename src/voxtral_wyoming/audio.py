@@ -6,7 +6,6 @@ This initial version is intentionally minimal to avoid heavy dependencies.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass

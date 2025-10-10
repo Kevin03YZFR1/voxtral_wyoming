@@ -204,7 +204,9 @@ class VoxtralTranscriber(ITranscriber):
         import torch  # type: ignore
 
         model_id = self.config.model_path
-        local_only = False  # Allow on-demand downloads
+        # Allow downloading from HuggingFace if model is not in local cache
+        # Set VOXTRAL_LOCAL_ONLY=true to enforce strict offline mode
+        local_only = os.getenv("VOXTRAL_LOCAL_ONLY", "false").lower() == "true"
 
         # Resolve dtype
         self._dtype = _map_dtype(self._device, self.config.dtype)
@@ -297,7 +299,6 @@ class VoxtralTranscriber(ITranscriber):
         # Store input length BEFORE moving to device to ensure we have the correct value
         # apply_transcription_request returns a BatchEncoding object with input_ids
         input_ids_length = model_inputs.get("input_ids").shape[1] if "input_ids" in model_inputs else 0
-        _logger.debug(f"Input IDs length (before device move): {input_ids_length}")
 
         # Move inputs to device - use .to() method if available to preserve BatchEncoding structure
         try:
@@ -331,9 +332,6 @@ class VoxtralTranscriber(ITranscriber):
         inference_time = time.perf_counter() - inference_start
         _logger.debug(f"Model inference completed in {inference_time:.2f}s")
 
-        _logger.debug(f"Generated outputs shape: {outputs.shape}")
-        _logger.debug(f"Generated outputs sample (first 10 tokens): {outputs[0, :10].tolist()}")
-
         # Decode the outputs
         # For apply_transcription_request, we need to skip the prompt tokens
         # The HuggingFace example shows: outputs[:, inputs.input_ids.shape[1]:]
@@ -342,22 +340,12 @@ class VoxtralTranscriber(ITranscriber):
             if input_ids_length > 0:
                 # Slice to get only generated tokens (excluding prompt)
                 generated_tokens = outputs[:, input_ids_length:]
-                _logger.debug(f"Generated tokens shape after slicing: {generated_tokens.shape}")
-                _logger.debug(f"Generated tokens sample (first 20): {generated_tokens[0, :20].tolist() if generated_tokens.shape[1] >= 20 else generated_tokens[0].tolist()}")
-
                 decoded = self._processor.batch_decode(
                     generated_tokens, skip_special_tokens=True
                 )
-                _logger.debug(f"Decoded {len(decoded)} results after slicing from position {input_ids_length}")
             else:
                 # No input_ids or length is 0, decode full output
-                _logger.debug(f"No input_ids_length, decoding full output")
                 decoded = self._processor.batch_decode(outputs, skip_special_tokens=True)
-                _logger.debug(f"Decoded {len(decoded)} results without slicing (input_ids_length={input_ids_length})")
-
-            if decoded:
-                _logger.info(f"Decoded result length: {len(decoded[0])} chars")
-                _logger.info(f"First 200 chars of decoded result: {decoded[0][:200]}")
         except Exception as e:
             _logger.error(f"Error decoding tokens: {e}", exc_info=True)
             decoded = []
@@ -368,7 +356,7 @@ class VoxtralTranscriber(ITranscriber):
 
         # Log total transcription time
         total_time = time.perf_counter() - start_time
-        _logger.debug(f"Total transcription time: {total_time * 1000:.2f}ms (audio duration: {duration:.2f}s)")
+        _logger.debug(f"Total transcription time: {total_time:.2f}s (audio duration: {duration:.2f}s)")
 
         return TranscriptionResult(
             text=text,

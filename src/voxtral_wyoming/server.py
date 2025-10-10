@@ -4,7 +4,6 @@ import asyncio
 import logging
 import os
 import time
-from typing import Optional
 
 import click
 
@@ -69,7 +68,7 @@ async def _wyoming_handle_client(
                 # Reply with minimal info about this ASR service
                 attribution = Attribution(
                     name="Voxtral Wyoming",
-                    url="https://github.com/your-org/voxtral_wyoming",
+                    url="https://github.com/Johnson145/voxtral_wyoming",
                 )
                 asr_model = AsrModel(
                     name="voxtral",
