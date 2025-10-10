@@ -132,35 +132,6 @@ def _pcm16_le_bytes_to_float32(audio_pcm: bytes):
     return (arr.astype(np.float32) / 32768.0)
 
 
-def _float32_to_base64_wav(audio_float32, sample_rate: int):
-    """Convert float32 audio array to base64-encoded WAV format for VoxtralProcessor."""
-    try:
-        import numpy as np  # type: ignore
-        import base64
-        import io
-        import wave
-    except Exception as e:  # pragma: no cover
-        raise ImportError(
-            "NumPy, base64, io, and wave are required for VoxtralTranscriber."
-        ) from e
-
-    # Convert float32 [-1, 1] to int16 PCM
-    audio_int16 = (audio_float32 * 32767).astype(np.int16)
-
-    # Create WAV file in memory
-    buffer = io.BytesIO()
-    with wave.open(buffer, 'wb') as wav_file:
-        wav_file.setnchannels(1)  # mono
-        wav_file.setsampwidth(2)  # 2 bytes per sample (int16)
-        wav_file.setframerate(sample_rate)
-        wav_file.writeframes(audio_int16.tobytes())
-
-    # Get WAV bytes and encode to base64
-    wav_bytes = buffer.getvalue()
-    base64_str = base64.b64encode(wav_bytes).decode('utf-8')
-    return base64_str
-
-
 class VoxtralTranscriber(ITranscriber):
     """Local Voxtral transcriber implementation.
 
