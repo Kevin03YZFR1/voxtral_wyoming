@@ -233,6 +233,16 @@ class VoxtralTranscriber(ITranscriber):
 
         _logger = logging.getLogger("voxtral_wyoming.transcriber")
 
+        # Validate audio input - handle None case
+        if audio_pcm is None:
+            _logger.warning("Received None audio_pcm, returning empty transcription")
+            return TranscriptionResult(
+                text="",
+                language=language or self.config.language or "en-US",
+                duration_sec=0.0,
+                confidence=None,
+            )
+
         # Validate and potentially convert audio format
         # Allow empty audio to pass through (will return empty/minimal transcription)
         if audio_pcm:
@@ -262,39 +272,39 @@ class VoxtralTranscriber(ITranscriber):
         wav = _pcm16_le_bytes_to_float32(audio_pcm)
         lang = _locale_to_lang(language or self.config.language)
 
-        # Convert audio to base64 WAV format for VoxtralProcessor
-        # VoxtralProcessor requires audio in base64-encoded format via apply_chat_template
+        # Use native transcription API with numpy array input
+        # This is the proper API for transcription-only use cases
+        # Pass the audio as numpy array directly (not base64) so the processor
+        # can properly extract audio features using WhisperFeatureExtractor
         try:
-            audio_base64 = _float32_to_base64_wav(wav, sample_rate)
-        except Exception as e:
-            raise RuntimeError(f"Error encoding audio to base64: {e}") from e
-
-        # Use apply_chat_template with base64 audio for proper multimodal processing
-        # Add explicit transcription instruction to prevent conversational responses
-        try:
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "audio", "base64": audio_base64},
-                        {"type": "text", "text": "Transcribe the audio exactly as spoken. Only provide the transcription, do not respond or answer."}
-                    ]
-                }
-            ]
-            model_inputs = self._processor.apply_chat_template(
-                messages,
-                return_tensors="pt"
+            model_inputs = self._processor.apply_transcription_request(
+                language=lang or "en",
+                audio=wav,
+                model_id=self.config.model_path,
+                sampling_rate=sample_rate,
+                format=["wav"]  # WAV is the container format for PCM audio data
             )
         except Exception as e:
             raise RuntimeError(f"Error preparing audio for model: {e}") from e
 
-        # Move inputs to device
+        # Store input length BEFORE moving to device to ensure we have the correct value
+        # apply_transcription_request returns a BatchEncoding object with input_ids
+        input_ids_length = model_inputs.get("input_ids").shape[1] if "input_ids" in model_inputs else 0
+        _logger.debug(f"Input IDs length (before device move): {input_ids_length}")
+
+        # Move inputs to device - use .to() method if available to preserve BatchEncoding structure
         try:
-            model_inputs = {
-                k: v.to(self._device) if hasattr(v, 'to') else v
-                for k, v in model_inputs.items()
-            }
-        except Exception:
+            if hasattr(model_inputs, 'to'):
+                # BatchEncoding has a .to() method that preserves structure
+                model_inputs = model_inputs.to(self._device)
+            else:
+                # Fallback for plain dict
+                model_inputs = {
+                    k: v.to(self._device) if hasattr(v, 'to') else v
+                    for k, v in model_inputs.items()
+                }
+        except Exception as e:
+            _logger.warning(f"Could not move inputs to device {self._device}: {e}")
             pass  # Fallback: use inputs as-is if device move fails
 
         # Generate with CPU-friendly, deterministic settings
@@ -310,15 +320,39 @@ class VoxtralTranscriber(ITranscriber):
                 **gen_kwargs,
             )
 
-        # Decode tokens
+        _logger.debug(f"Generated outputs shape: {outputs.shape}")
+        _logger.debug(f"Generated outputs sample (first 10 tokens): {outputs[0, :10].tolist()}")
+
+        # Decode the outputs
+        # For apply_transcription_request, we need to skip the prompt tokens
+        # The HuggingFace example shows: outputs[:, inputs.input_ids.shape[1]:]
         try:
-            decoded = self._processor.batch_decode(
-                outputs, skip_special_tokens=True
-            )
-        except Exception:
+            # Decode with proper slicing to remove prompt tokens
+            if input_ids_length > 0:
+                # Slice to get only generated tokens (excluding prompt)
+                generated_tokens = outputs[:, input_ids_length:]
+                _logger.debug(f"Generated tokens shape after slicing: {generated_tokens.shape}")
+                _logger.debug(f"Generated tokens sample (first 20): {generated_tokens[0, :20].tolist() if generated_tokens.shape[1] >= 20 else generated_tokens[0].tolist()}")
+
+                decoded = self._processor.batch_decode(
+                    generated_tokens, skip_special_tokens=True
+                )
+                _logger.debug(f"Decoded {len(decoded)} results after slicing from position {input_ids_length}")
+            else:
+                # No input_ids or length is 0, decode full output
+                _logger.debug(f"No input_ids_length, decoding full output")
+                decoded = self._processor.batch_decode(outputs, skip_special_tokens=True)
+                _logger.debug(f"Decoded {len(decoded)} results without slicing (input_ids_length={input_ids_length})")
+
+            if decoded:
+                _logger.info(f"Decoded result length: {len(decoded[0])} chars")
+                _logger.info(f"First 200 chars of decoded result: {decoded[0][:200]}")
+        except Exception as e:
+            _logger.error(f"Error decoding tokens: {e}", exc_info=True)
             decoded = []
 
         text = (decoded[0] if decoded else "").strip()
+        _logger.info(f"Final transcription text (length={len(text)} chars): {text[:100]}{'...' if len(text) > 100 else ''}")
         duration = len(audio_pcm) / float(2 * max(1, sample_rate)) if audio_pcm else 0.0
 
         return TranscriptionResult(
