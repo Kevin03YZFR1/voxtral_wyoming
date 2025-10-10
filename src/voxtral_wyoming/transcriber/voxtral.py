@@ -193,10 +193,7 @@ class VoxtralTranscriber(ITranscriber):
         import torch  # type: ignore
 
         model_id = self.config.model_id
-
-        # Allow downloading from HuggingFace if model is not in local cache
-        # Set VOXTRAL_LOCAL_ONLY=true to enforce strict offline mode
-        local_only = os.getenv("VOXTRAL_LOCAL_ONLY", "false").lower() == "true"
+        local_only = False
 
         # Resolve dtype
         self._dtype = _map_dtype(self._device, self.config.dtype)

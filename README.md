@@ -77,7 +77,6 @@ Configuration can be set via environment variables or CLI options:
 - `VOXTRAL_DEVICE` (default: cuda) - Device: cpu|cuda|mps (automatically falls back to CPU if device fails)
 - `VOXTRAL_DTYPE` (default: fp32) - Data type: fp32|fp16|bf16 (CPU forces fp32)
 - `VOXTRAL_MAX_NEW_TOKENS` (default: 128) - Maximum generation length
-- `VOXTRAL_LOCAL_ONLY` (default: false) - Set to "true" to enforce strict offline mode (no HuggingFace downloads)
 
 ## Development
 
@@ -151,7 +150,6 @@ uv run pytest --cov=voxtral_wyoming --cov-report=term-missing
 If you see "model not found" errors:
 1. Ensure `MODEL_ID` points to a valid model id from Hugging Face
 2. Or ensure the model is in your HuggingFace cache (run `huggingface-cli download mistralai/Voxtral-Mini-3B-2507`)
-3. Set `VOXTRAL_LOCAL_ONLY=true` to prevent accidental downloads
 
 ### Audio Format Errors
 
