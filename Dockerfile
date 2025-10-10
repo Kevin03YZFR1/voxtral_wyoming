@@ -28,6 +28,10 @@ COPY src /app/src
 
 # Create non-root user and take ownership before creating venv
 RUN useradd -m -u 10001 -s /usr/sbin/nologin appuser && chown -R 10001:10001 /app
+
+# Create HuggingFace cache directory with proper ownership for volume mount
+RUN mkdir -p /home/appuser/.cache/huggingface && chown -R 10001:10001 /home/appuser/.cache
+
 USER appuser
 
 # Create and populate uv-managed virtual environment as non-root

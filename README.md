@@ -40,6 +40,65 @@ docker run --rm -it --gpus all \
   voxtral-wyoming:latest
 ```
 
+### Docker Compose Deployment (Recommended)
+
+For easier deployment and configuration management, use Docker Compose:
+
+1. **Copy the environment template:**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Edit `.env` to configure your setup:**
+   ```bash
+   # Edit configuration values as needed
+   vim .env
+   ```
+
+3. **Start the service:**
+   ```bash
+   # Build and start in detached mode
+   docker compose up --build -d
+
+   # View logs
+   docker compose logs -f
+   ```
+
+**Configuration Options:**
+
+All settings can be configured via the `.env` file:
+- Server settings: `HOST`, `PORT`, `LANGUAGE`, `SAMPLE_RATE`, `MAX_SECONDS`, `LOG_LEVEL`
+- Model settings: `MODEL_ID`, `DEVICE`, `DATA_TYPE`, `MAX_NEW_TOKENS`
+
+See `.env.example` for detailed documentation of all options.
+
+**GPU Support:**
+
+To enable NVIDIA GPU support, uncomment the `deploy` section in `docker-compose.yml`:
+
+```yaml
+deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: 1
+          capabilities: [gpu]
+```
+
+Then set `DEVICE=cuda` in your `.env` file.
+
+**Local Model Files:**
+
+If you have pre-downloaded Voxtral models, uncomment the model volume mount in `docker-compose.yml`:
+
+```yaml
+volumes:
+  - ./models:/models:ro
+```
+
+Then set `MODEL_ID=/models/Voxtral-Mini-3B-2507` in your `.env` file.
+
 ### Adding ffmpeg for Audio Format Support
 
 To enable server-side audio format conversion, add ffmpeg to your Dockerfile:
