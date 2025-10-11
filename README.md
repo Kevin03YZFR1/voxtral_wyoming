@@ -1,6 +1,6 @@
 # Voxtral Wyoming STT
 
-Offline Speech-to-Text (STT) service using Mistral's Voxtral models with Wyoming protocol compatibility for Home Assistant Assist integration.
+Offline Speech-to-Text (STT) service using [Mistral's Voxtral](https://mistral.ai/news/voxtral) model with [Wyoming protocol](https://github.com/OHF-Voice/wyoming) compatibility for Home Assistant Assist integration.
 
 The goal is to provide a powerful drop-in alternative to the popular Whisper STT option. Especially for non-English languages, Voxtral will hopefully set the new state of the art.
 
