@@ -65,7 +65,8 @@ async def _wyoming_handle_client(
                 break
 
             if Describe.is_type(event.type):
-                # Reply with minimal info about this ASR service
+                _LOGGER.debug("Received Describe event from client %s", addr)
+
                 attribution = Attribution(
                     name="Voxtral Wyoming",
                     url="https://github.com/Johnson145/voxtral_wyoming",
@@ -90,26 +91,61 @@ async def _wyoming_handle_client(
                 try:
                     await async_write_event(Info(asr=[asr_program]).event(), writer)
                 except (ConnectionResetError, BrokenPipeError, OSError):
-                    _LOGGER.info("Client disconnected during Info write: %s", addr)
+                    _LOGGER.warning("Client disconnected during Info write: %s", addr)
                     break
 
             elif Transcribe.is_type(event.type):
                 transcribe = Transcribe.from_event(event)
+
+                log_parts = [
+                    f"model: {transcribe.name if transcribe.name else 'default'}",
+                    f"language: {transcribe.language if transcribe.language else 'default'}",
+                ]
+                if transcribe.context:
+                    log_parts.append(f"context: {transcribe.context}")
+                _LOGGER.debug(
+                    "Received Transcribe event from client %s (%s)",
+                    addr,
+                    ", ".join(log_parts)
+                )
+
                 if transcribe.language:
                     lang_hint = transcribe.language
 
             elif AudioStart.is_type(event.type):
                 audio_start = AudioStart.from_event(event)
-                # Prefer rate from client if provided
-                sample_rate = getattr(audio_start, "rate", sample_rate) or sample_rate
                 # Note: We expect width=2, channels=1 (PCM16 mono)
+
+                # Prefer sample rate from client if provided
+                sample_rate = getattr(audio_start, "rate", sample_rate) or sample_rate
+
+                log_msg = f"Received AudioStart event from client {addr} (rate: {sample_rate} Hz, width: {getattr(audio_start, 'width', 'unknown')}, channels: {getattr(audio_start, 'channels', 'unknown')}"
+                if audio_start.timestamp is not None:
+                    log_msg += f", timestamp: {audio_start.timestamp}ms"
+                log_msg += ")"
+                _LOGGER.debug(log_msg)
 
             elif AudioChunk.is_type(event.type):
                 audio_chunk = AudioChunk.from_event(event)
                 if audio_chunk.audio:
+                    # Too verbose for permanent logging
+                    # log_msg = f"Received AudioChunk event from client {addr} (chunk size: {len(audio_chunk.audio)} bytes, total accumulated: {len(audio) + len(audio_chunk.audio)} bytes"
+                    # if audio_chunk.timestamp is not None:
+                    #     log_msg += f", timestamp: {audio_chunk.timestamp}ms"
+                    # log_msg += ")"
+                    # _LOGGER.debug(log_msg)
+
                     audio.extend(audio_chunk.audio)
 
             elif AudioStop.is_type(event.type):
+                audio_stop = AudioStop.from_event(event)
+
+                log_msg = f"Received AudioStop event from client {addr} (total audio received: {len(audio)} bytes"
+                if audio_stop.timestamp is not None:
+                    log_msg += f", timestamp: {audio_stop.timestamp}ms"
+                log_msg += ")"
+                _LOGGER.debug(log_msg)
+
                 # Start timing for overall request processing
                 request_start = time.perf_counter()
 
@@ -132,11 +168,16 @@ async def _wyoming_handle_client(
                     request_time = time.perf_counter() - request_start
                     _LOGGER.debug(f"Request processing completed in {request_time:.2f}s (client: {addr})")
                 except (ConnectionResetError, BrokenPipeError, OSError):
-                    _LOGGER.info("Client disconnected before receiving Transcript: %s", addr)
+                    _LOGGER.warning("Client disconnected before receiving Transcript: %s", addr)
                 break
 
             else:
                 # Ignore other messages
+                _LOGGER.warning(
+                    "Received unknown/unhandled event from client %s (event type: %s)",
+                    addr,
+                    event.type if hasattr(event, 'type') else 'unknown'
+                )
                 continue
     finally:
         try:
@@ -163,7 +204,7 @@ async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: 
     )
 
     addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets or [])
-    _LOGGER.info("Wyoming server listening on %s", addrs)
+    _LOGGER.info("Wyoming server successfully started. Ready to listen for client calls on %s.", addrs)
 
     async with server:
         await server.serve_forever()
