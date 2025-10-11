@@ -9,7 +9,7 @@ import click
 
 from .transcriber.voxtral import VoxtralTranscriber, VoxtralConfig
 from .transcriber.base import ITranscriber
-from .audio import AudioSpec, clamp_audio_size
+from .audio import AudioSpec, clamp_audio_size, save_audio_as_wav
 
 # Environment variable defaults
 DEFAULT_HOST = os.getenv("HOST", "0.0.0.0")
@@ -18,6 +18,8 @@ DEFAULT_LANGUAGE = os.getenv("LANGUAGE", "en-US")
 DEFAULT_SAMPLE_RATE = int(os.getenv("SAMPLE_RATE", "16000"))
 DEFAULT_LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 DEFAULT_MAX_SECONDS = int(os.getenv("MAX_SECONDS", "60"))
+DEFAULT_SAVE_AUDIO = os.getenv("SAVE_AUDIO", "false").lower() in ("true", "1", "yes")
+DEFAULT_AUDIO_SAVE_DIR = os.getenv("AUDIO_SAVE_DIR", "/output/audio")
 
 _LOGGER = logging.getLogger("voxtral_wyoming")
 
@@ -30,6 +32,8 @@ async def _wyoming_handle_client(
     default_sample_rate: int,
     transcriber: ITranscriber,
     max_seconds: int,
+    save_audio: bool,
+    audio_save_dir: str,
 ) -> None:
     """Handle a single Wyoming TCP connection for ASR.
 
@@ -161,6 +165,19 @@ async def _wyoming_handle_client(
                     _LOGGER.exception("Transcription failed: %s", e)
                     text = ""
                     lang_out = lang_hint
+
+                # Save audio if enabled (after transcription to include text in filename)
+                if save_audio and audio_pcm:
+                    try:
+                        saved_path = save_audio_as_wav(
+                            audio_pcm,
+                            sample_rate=sample_rate,
+                            output_dir=audio_save_dir,
+                            text=text,
+                        )
+                        _LOGGER.info("Saved audio to %s", saved_path)
+                    except Exception as e:
+                        _LOGGER.error("Failed to save audio: %s", e, exc_info=True)
                 try:
                     await async_write_event(Transcript(text=text, language=lang_out).event(), writer)
 
@@ -188,7 +205,7 @@ async def _wyoming_handle_client(
         _LOGGER.debug("Client disconnected: %s", addr)
 
 
-async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: int, transcriber: ITranscriber, max_seconds: int) -> None:
+async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: int, transcriber: ITranscriber, max_seconds: int, save_audio: bool, audio_save_dir: str) -> None:
     """Run a Wyoming TCP server over asyncio that handles ASR streams."""
     server = await asyncio.start_server(
         lambda r, w: _wyoming_handle_client(
@@ -198,6 +215,8 @@ async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: 
             default_sample_rate=sample_rate,
             transcriber=transcriber,
             max_seconds=max_seconds,
+            save_audio=save_audio,
+            audio_save_dir=audio_save_dir,
         ),
         host,
         port,
@@ -244,7 +263,22 @@ async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: 
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False),
     help="Logging level",
 )
-def cli(host: str, port: int, language: str, sample_rate: int, max_seconds: int, log_level: str) -> None:
+@click.option(
+    "--save-audio",
+    envvar="SAVE_AUDIO",
+    default=DEFAULT_SAVE_AUDIO,
+    is_flag=True,
+    show_default=True,
+    help="Save all received audio input as WAV files (one per request)",
+)
+@click.option(
+    "--audio-save-dir",
+    envvar="AUDIO_SAVE_DIR",
+    default=DEFAULT_AUDIO_SAVE_DIR,
+    show_default=True,
+    help="Directory where audio files will be saved",
+)
+def cli(host: str, port: int, language: str, sample_rate: int, max_seconds: int, log_level: str, save_audio: bool, audio_save_dir: str) -> None:
     """Start the Voxtral Wyoming STT service using the Wyoming protocol and Voxtral backend."""
     logging.basicConfig(level=getattr(logging, log_level.upper(), logging.INFO), format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
     _LOGGER.info(
@@ -256,6 +290,11 @@ def cli(host: str, port: int, language: str, sample_rate: int, max_seconds: int,
         max_seconds,
     )
 
+    if save_audio:
+        _LOGGER.info("Audio saving enabled: files will be saved to %s", audio_save_dir)
+    else:
+        _LOGGER.info("Audio saving disabled")
+
     # Initialize Voxtral transcriber
     try:
         transcriber: ITranscriber = VoxtralTranscriber(VoxtralConfig())
@@ -265,7 +304,7 @@ def cli(host: str, port: int, language: str, sample_rate: int, max_seconds: int,
         raise SystemExit(2)
 
     try:
-        asyncio.run(_run_wyoming_server(host, port, language, sample_rate, transcriber, max_seconds))
+        asyncio.run(_run_wyoming_server(host, port, language, sample_rate, transcriber, max_seconds, save_audio, audio_save_dir))
     except KeyboardInterrupt:
         _LOGGER.info("Shutting down (keyboard interrupt)")
 

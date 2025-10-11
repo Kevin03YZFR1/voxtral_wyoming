@@ -31,6 +31,9 @@ RUN useradd -m -u 10001 -s /usr/sbin/nologin appuser && chown -R 10001:10001 /ap
 # Create HuggingFace cache directory with proper ownership for volume mount
 RUN mkdir -p /home/appuser/.cache/huggingface && chown -R 10001:10001 /home/appuser/.cache
 
+# Create output directory for audio files with proper ownership
+RUN mkdir -p /output/audio && chown -R 10001:10001 /output
+
 USER appuser
 
 # Create and populate uv-managed virtual environment as non-root

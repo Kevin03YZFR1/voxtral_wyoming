@@ -19,10 +19,15 @@ services:
       - DEVICE=${DEVICE:-cuda}
       - DATA_TYPE=${DATA_TYPE:-bf16}
       - MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-128}
+      - SAVE_AUDIO=${SAVE_AUDIO:-false}
+      - AUDIO_SAVE_DIR=/output/audio
     volumes:
       # Mount local model directory (optional, for pre-downloaded models)
       # Uncomment and adjust path if you have models stored locally
       # - ./models:/models:ro
+
+      # Mount directory for saved audio files (when SAVE_AUDIO=true)
+      - ./output/audio:/output/audio
 
       # Persist HuggingFace cache (optional)
       - huggingface_cache:/home/appuser/.cache/huggingface

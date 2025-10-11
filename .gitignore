@@ -27,3 +27,9 @@ dist/
 # Environment-specific configuration
 .env
 docker-compose.override.yml
+
+# Output directory for saved audio files
+/output/*
+!/output/audio/
+/output/audio/*
+!/output/audio/.gitkeep
