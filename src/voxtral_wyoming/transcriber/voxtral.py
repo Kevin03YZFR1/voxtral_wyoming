@@ -17,7 +17,7 @@ from .base import ITranscriber, TranscriptionResult
 class VoxtralConfig:
     model_id: Optional[str] = os.getenv("MODEL_ID", "mistralai/Voxtral-Mini-3B-2507")
     device: str = os.getenv("DEVICE", "cuda")
-    dtype: str = os.getenv("DATA_TYPE", "fp32")
+    dtype: str = os.getenv("DATA_TYPE", "bf16")  # fp32|fp16|bf16 - see .env.example for trade-offs
     language: Optional[str] = os.getenv("LANGUAGE")
     max_new_tokens: int = int(os.getenv("MAX_NEW_TOKENS", "128"))
 
@@ -45,6 +45,13 @@ def _map_dtype(device: str, dtype_str: str):
         return torch.bfloat16
     if norm in ("fp16", "float16"):
         return torch.float16
+    if norm in ("fp32", "float32"):
+        return torch.float32
+
+    import logging
+    _logger = logging.getLogger("voxtral_wyoming.transcriber")
+    _logger.error(f"Unknown dtype: {dtype_str}. Falling back to fp32")
+
     return torch.float32
 
 

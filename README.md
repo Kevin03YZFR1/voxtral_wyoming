@@ -115,7 +115,11 @@ Configuration can be set via environment variables:
 - `LANGUAGE` (default: en-US) - Language/locale hint
 - `MODEL_ID` ID Voxtral model to use: "mistralai/Voxtral-Mini-3B-2507" (default) or "mistralai/Voxtral-Small-24B-2507" (or other compatible variant from Hugging Face)
 - `DEVICE` (default: cuda) - Device: cpu|cuda|mps (automatically falls back to CPU if device fails)
-- `DATA_TYPE` (default: fp32) - Data type: fp32|fp16|bf16 (CPU forces fp32)
+- `DATA_TYPE` (default: bf16) - Data type for model weights: fp32|fp16|bf16
+  - **fp32**: Best accuracy, highest memory/slowest (recommended for CPU)
+  - **bf16**: Best balance of speed/memory/accuracy (recommended for modern GPUs: RTX 30xx+, A100+)
+  - **fp16**: Compatible with older GPUs, but less stable than bf16
+  - Note: CPU always uses fp32 for stability. See `.env.example` for detailed trade-offs and recommendations.
 - `LOG_LEVEL` (default: INFO) - Logging level
 - `MAX_SECONDS` (default: 60) - Maximum audio duration in seconds
 - `SAMPLE_RATE` (default: 16000) - Expected audio sample rate in Hz
@@ -227,11 +231,10 @@ If Home Assistant can't connect:
 4. Check server logs for connection attempts
 
 ## Performance
-I haven't done extensive performance tests yet, but on my RTX 3090 most STT requests are handled in less than a second while using ~18GB VRAM.
+I haven't done extensive performance tests yet, but using the default configuration on my RTX 3090 most STT requests are handled in ~0.5s while using ~9GB VRAM.
 
 ## Online Alternative
 If you do not want to host Voxtral on your own, but rather use Mistral's online API, [ha-openai-whisper-stt-api is a nice HA addon provided by fabio-garavini](https://github.com/fabio-garavini/ha-openai-whisper-stt-api).
 
 ## Contributing
-
 Contributions are welcome!
