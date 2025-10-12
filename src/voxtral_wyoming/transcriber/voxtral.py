@@ -20,7 +20,6 @@ class VoxtralConfig:
     dtype: str = os.getenv("DATA_TYPE", "bf16")  # fp32|fp16|bf16 - see .env.example for trade-offs
     language: Optional[str] = os.getenv("LANGUAGE")
     max_new_tokens: int = int(os.getenv("MAX_NEW_TOKENS", "128"))
-    prompt: Optional[str] = os.getenv("PROMPT")
 
 
 def _locale_to_lang(locale: Optional[str]) -> Optional[str]:
@@ -196,7 +195,7 @@ class VoxtralTranscriber(ITranscriber):
 
         self._loaded = True
 
-    def transcribe(self, audio_pcm: bytes, sample_rate: int, language: Optional[str] = None, prompt: Optional[str] = None) -> TranscriptionResult:
+    def transcribe(self, audio_pcm: bytes, sample_rate: int, language: Optional[str] = None) -> TranscriptionResult:
         # Lazy-load heavy deps and model
         self._ensure_loaded()
 
@@ -207,11 +206,6 @@ class VoxtralTranscriber(ITranscriber):
 
         # Start timing for overall transcription
         start_time = time.perf_counter()
-
-        # Determine effective prompt: per-request prompt takes precedence over default
-        effective_prompt = prompt or self.config.prompt
-        if effective_prompt:
-            _logger.debug(f"Using prompt/context for transcription: {effective_prompt[:100]}{'...' if len(effective_prompt) > 100 else ''}")
 
         # Validate audio input - handle None case
         if audio_pcm is None:
@@ -292,26 +286,6 @@ class VoxtralTranscriber(ITranscriber):
             "do_sample": False,
             "num_beams": 1,
         }
-
-        # Add prompt to generation if provided
-        # For Voxtral/Whisper-based models, prompts guide the transcription
-        # by providing context like expected vocabulary, formatting, or topic
-        if effective_prompt:
-            try:
-                # Tokenize the prompt text to get token IDs
-                # The prompt should be prepended to guide the decoder
-                prompt_ids = self._processor.tokenizer.encode(
-                    effective_prompt,
-                    add_special_tokens=False,
-                    return_tensors="pt"
-                ).to(self._device)
-
-                # Pass prompt_ids to the generation
-                # This provides context to the decoder
-                gen_kwargs["prompt_ids"] = prompt_ids
-                _logger.debug(f"Tokenized prompt to {prompt_ids.shape[1]} tokens")
-            except Exception as e:
-                _logger.warning(f"Failed to process prompt, continuing without it: {e}")
 
         # Time the model inference
         inference_start = time.perf_counter()

@@ -61,7 +61,6 @@ async def _wyoming_handle_client(
     audio = bytearray()
     sample_rate = default_sample_rate
     lang_hint = language
-    context_hint = None  # Store context/prompt from Transcribe event
 
     try:
         while True:
@@ -117,10 +116,6 @@ async def _wyoming_handle_client(
                 if transcribe.language:
                     lang_hint = transcribe.language
 
-                # Capture context/prompt for use in transcription
-                if transcribe.context:
-                    context_hint = transcribe.context
-
             elif AudioStart.is_type(event.type):
                 audio_start = AudioStart.from_event(event)
                 # Note: We expect width=2, channels=1 (PCM16 mono)
@@ -163,7 +158,7 @@ async def _wyoming_handle_client(
                 audio_pcm = clamp_audio_size(bytes(audio), spec, max_seconds=max_seconds)
 
                 try:
-                    result = transcriber.transcribe(audio_pcm, sample_rate=sample_rate, language=lang_hint, prompt=context_hint)
+                    result = transcriber.transcribe(audio_pcm, sample_rate=sample_rate, language=lang_hint)
                     text = result.text or ""
                     lang_out = result.language or lang_hint
                 except Exception as e:

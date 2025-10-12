@@ -23,7 +23,6 @@ class ITranscriber(Protocol):
         audio_pcm: bytes,
         sample_rate: int,
         language: Optional[str] = None,
-        prompt: Optional[str] = None,
     ) -> TranscriptionResult:
         """Transcribe raw PCM16 mono audio.
 
@@ -31,7 +30,6 @@ class ITranscriber(Protocol):
             audio_pcm: Little-endian PCM16 mono bytes.
             sample_rate: Sample rate in Hz (e.g., 16000).
             language: Optional language/locale hint (e.g., "en-US").
-            prompt: Optional context/prompt to guide transcription (e.g., expected vocabulary, topic, formatting hints).
 
         Returns:
             TranscriptionResult with text and optional metadata.
