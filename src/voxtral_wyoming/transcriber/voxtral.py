@@ -244,7 +244,14 @@ class VoxtralTranscriber(ITranscriber):
 
         # Prepare audio as float32 numpy array in [-1, 1]
         wav = _pcm16_le_bytes_to_float32(audio_pcm)
+
         lang = _locale_to_lang(language or self.config.language)
+        lang = lang or "en"
+
+        # Log transcription start with key parameters
+        _logger.info(
+            f"Starting transcription: language={lang}, sample_rate={sample_rate}Hz, model_id={self.config.model_id}"
+        )
 
         # Use native transcription API with numpy array input
         # This is the proper API for transcription-only use cases
@@ -252,7 +259,7 @@ class VoxtralTranscriber(ITranscriber):
         # can properly extract audio features using WhisperFeatureExtractor
         try:
             model_inputs = self._processor.apply_transcription_request(
-                language=lang or "en",
+                language=lang,
                 audio=wav,
                 model_id=self.config.model_id,
                 sampling_rate=sample_rate,

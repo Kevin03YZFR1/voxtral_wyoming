@@ -21,6 +21,19 @@ DEFAULT_MAX_SECONDS = int(os.getenv("MAX_SECONDS", "60"))
 DEFAULT_SAVE_AUDIO = os.getenv("SAVE_AUDIO", "false").lower() in ("true", "1", "yes")
 DEFAULT_AUDIO_SAVE_DIR = os.getenv("AUDIO_SAVE_DIR", "/output/audio")
 
+# Voxtral supported languages
+# see https://huggingface.co/mistralai/Voxtral-Mini-3B-2507
+SUPPORTED_LANGUAGES = [
+    "en-US",  # English
+    "fr-FR",  # French
+    "de-DE",  # German
+    "es-ES",  # Spanish
+    "it-IT",  # Italian
+    "pt-PT",  # Portuguese
+    "nl-NL",  # Dutch
+    "hi-IN",  # Hindi
+]
+
 _LOGGER = logging.getLogger("voxtral_wyoming")
 
 
@@ -81,7 +94,7 @@ async def _wyoming_handle_client(
                     installed=True,
                     description="Offline STT with Mistral Voxtral",
                     version=VW_VERSION,
-                    languages=[lang_hint],
+                    languages=SUPPORTED_LANGUAGES,
                 )
                 asr_program = AsrProgram(
                     name="voxtral-wyoming",
