@@ -22,6 +22,13 @@ class VoxtralConfig:
     dtype: str = os.getenv("DATA_TYPE", "bf16")  # fp32|fp16|bf16 - see .env.example for trade-offs
     locale: str = os.getenv("LANGUAGE_FALLBACK", "en-US")
     max_new_tokens: int = int(os.getenv("MAX_NEW_TOKENS", "128"))
+    use_chat_mode: bool = os.getenv("USE_CHAT_MODE", "false").lower() in ("true", "1", "yes")
+    system_prompt: str = os.getenv(
+        "SYSTEM_PROMPT",
+        "You are a voice assistant for a smart home. Transcribe the user's voice command accurately. "
+        "Commands are typically short, imperative sentences like 'turn on the lights' or 'set temperature to 20 degrees'. "
+        "Focus on accuracy and be aware of smart home terminology."
+    )
 
 
 def _locale_to_lang(locale: Optional[str]) -> Optional[str]:
@@ -141,6 +148,27 @@ def _pcm16_le_bytes_to_float32(audio_pcm: bytes):
     return (arr.astype(np.float32) / 32768.0)
 
 
+def _audio_array_to_base64(audio_array, sample_rate: int) -> str:
+    """Convert numpy audio array to base64-encoded WAV format for chat template."""
+    import base64
+    import io
+    try:
+        import soundfile as sf  # type: ignore
+    except Exception as e:
+        raise ImportError(
+            "soundfile is required for chat mode. Install soundfile."
+        ) from e
+
+    # Write audio to in-memory WAV file
+    buffer = io.BytesIO()
+    sf.write(buffer, audio_array, sample_rate, format='WAV', subtype='PCM_16')
+    buffer.seek(0)
+
+    # Encode to base64
+    audio_bytes = buffer.read()
+    return base64.b64encode(audio_bytes).decode('utf-8')
+
+
 class VoxtralTranscriber(ITranscriber):
     """Local Voxtral transcriber implementation.
 
@@ -251,28 +279,66 @@ class VoxtralTranscriber(ITranscriber):
         wav = _pcm16_le_bytes_to_float32(audio_pcm)
 
         # Log transcription start with key parameters
+        mode_str = "chat mode" if self.config.use_chat_mode else "transcribe-only mode"
         _logger.info(
-            f"Starting transcription: language={locale}, sample_rate={sample_rate}Hz, model_id={self.config.model_id}"
+            f"Starting transcription ({mode_str}): language={locale}, sample_rate={sample_rate}Hz, model_id={self.config.model_id}"
         )
 
-        # Use native transcription API with numpy array input
-        # This is the proper API for transcription-only use cases
-        # Pass the audio as numpy array directly (not base64) so the processor
-        # can properly extract audio features using WhisperFeatureExtractor
-        try:
-            model_inputs = self._processor.apply_transcription_request(
-                language=language_only,
-                audio=wav,
-                model_id=self.config.model_id,
-                sampling_rate=sample_rate,
-                format=["wav"]  # WAV is the container format for PCM audio data
-            )
-        except Exception as e:
-            raise RuntimeError(f"Error preparing audio for model: {e}") from e
+        # Choose between chat mode (with system prompt) or transcribe-only mode
+        if self.config.use_chat_mode:
+            # Chat mode: Use apply_chat_template with system prompt
+            # This allows custom prompts to guide the transcription context
+            _logger.debug(f"Using chat mode with system prompt: {self.config.system_prompt[:100]}...")
 
-        # Store input length BEFORE moving to device to ensure we have the correct value
-        # apply_transcription_request returns a BatchEncoding object with input_ids
-        input_ids_length = model_inputs.get("input_ids").shape[1] if "input_ids" in model_inputs else 0
+            try:
+                # Convert audio to base64 for chat template
+                audio_base64 = _audio_array_to_base64(wav, sample_rate)
+
+                # Build conversation with system context and transcription request
+                # Note: Mistral models may not support explicit "system" role,
+                # so we include the system prompt in the user message
+                conversation = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": self.config.system_prompt},
+                            {"type": "audio", "base64": audio_base64},
+                            {"type": "text", "text": "Transcribe the audio."},
+                        ],
+                    },
+                ]
+
+                # Apply chat template with language hint if available
+                # Note: MistralCommonTokenizer does not support add_generation_prompt parameter
+                model_inputs = self._processor.apply_chat_template(
+                    conversation,
+                    return_dict=True,
+                    tokenize=True,
+                )
+            except Exception as e:
+                raise RuntimeError(f"Error preparing audio for model in chat mode: {e}") from e
+
+            # Store input length for chat mode
+            input_ids_length = model_inputs.get("input_ids").shape[1] if "input_ids" in model_inputs else 0
+        else:
+            # Transcribe-only mode: Use native transcription API (default, current behavior)
+            # This is the proper API for transcription-only use cases
+            # Pass the audio as numpy array directly (not base64) so the processor
+            # can properly extract audio features using WhisperFeatureExtractor
+            try:
+                model_inputs = self._processor.apply_transcription_request(
+                    language=language_only,
+                    audio=wav,
+                    model_id=self.config.model_id,
+                    sampling_rate=sample_rate,
+                    format=["wav"]  # WAV is the container format for PCM audio data
+                )
+            except Exception as e:
+                raise RuntimeError(f"Error preparing audio for model: {e}") from e
+
+            # Store input length BEFORE moving to device to ensure we have the correct value
+            # apply_transcription_request returns a BatchEncoding object with input_ids
+            input_ids_length = model_inputs.get("input_ids").shape[1] if "input_ids" in model_inputs else 0
 
         # Move inputs to device - use .to() method if available to preserve BatchEncoding structure
         try:

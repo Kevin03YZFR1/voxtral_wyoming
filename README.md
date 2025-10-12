@@ -10,6 +10,7 @@ The goal is to provide a powerful drop-in alternative to the popular Whisper STT
 - 🔌 **Wyoming Protocol**: Full compatibility with Home Assistant Assist
 - 🐳 **Docker Ready**: Containerized deployment with non-root user
 - ⚡ **Device Flexibility**: CPU, CUDA (NVIDIA), or MPS (Apple Silicon) support
+- 💬 **Dual Mode Support**: Choose between optimized transcribe-only mode or chat mode with custom system prompts for domain-specific context
 - 🎵 **Audio Format Support**: Automatic conversion of MP3, OGG, FLAC, WAV to PCM16 (requires ffmpeg)
 
 ## Docker Compose Deployment (Recommended)
@@ -137,6 +138,10 @@ Configuration can be set via environment variables:
 - `LOG_LEVEL` (default: INFO) - Logging level
 - `MAX_SECONDS` (default: 60) - Maximum audio duration in seconds
 - `MAX_NEW_TOKENS` (default: 128) - Maximum generation length
+- `USE_CHAT_MODE` (default: false) - Enable chat mode with system prompts instead of transcribe-only mode
+  - **false**: Optimized transcribe-only mode (faster, recommended for most users)
+  - **true**: Chat mode with system prompt support (allows domain-specific context guidance)
+- `SYSTEM_PROMPT` (default: smart home context) - System prompt for chat mode (only used when `USE_CHAT_MODE=true`). Customize to provide context about smart home commands, domain-specific vocabulary, or command structure expectations.
 - `SAVE_AUDIO` (default: false) - Save all received audio input as WAV files (one per request)
 - `AUDIO_SAVE_DIR` (default: ./output/audio/) - Directory where audio files will be saved
 - `LANGUAGE_FALLBACK` (default: en-US) - Fallback language/locale hint. Will get overridden by the configuration of your Home Assistant Voice Assistant.
