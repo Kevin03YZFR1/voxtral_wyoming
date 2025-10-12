@@ -1,13 +1,4 @@
-# Minimal runtime image for Voxtral Wyoming STT
 FROM python:3.13-slim AS runtime
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    HOST=0.0.0.0 \
-    PORT=10300 \
-    LANGUAGE_FALLBACK=en-US \
-    SAMPLE_RATE_FALLBACK=16000 \
-    LOG_LEVEL=INFO
 
 # Install system dependencies and uv (global)
 RUN apt-get update && apt-get install -y --no-install-recommends \
