@@ -7,19 +7,13 @@ services:
     container_name: voxtral-wyoming
     ports:
       - "${PORT:-10300}:10300"
+    env_file: .env
     environment:
-      - HOST=${HOST:-0.0.0.0}
+      # IP's used on the host machine are usually not available within the docker container, but will get used by the
+      # port definition made above.
+      - HOST=0.0.0.0
       # port _within_ the container needs to be stable
       - PORT=10300
-      - LANGUAGE=${LANGUAGE:-en-US}
-      - SAMPLE_RATE=${SAMPLE_RATE:-16000}
-      - MAX_SECONDS=${MAX_SECONDS:-60}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MODEL_ID=${MODEL_ID:-mistralai/Voxtral-Mini-3B-2507}
-      - DEVICE=${DEVICE:-cuda}
-      - DATA_TYPE=${DATA_TYPE:-bf16}
-      - MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-128}
-      - SAVE_AUDIO=${SAVE_AUDIO:-false}
       - AUDIO_SAVE_DIR=/output/audio
     volumes:
       # Mount local model directory (optional, for pre-downloaded models)
