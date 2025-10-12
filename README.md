@@ -10,6 +10,7 @@ The goal is to provide a powerful drop-in alternative to the popular Whisper STT
 - 🔌 **Wyoming Protocol**: Full compatibility with Home Assistant Assist
 - 🐳 **Docker Ready**: Containerized deployment with non-root user
 - ⚡ **Device Flexibility**: CPU, CUDA (NVIDIA), or MPS (Apple Silicon) support
+- 💬 **Context/Prompt Support**: Guide transcription with context hints for better accuracy
 - 🎵 **Audio Format Support**: Automatic conversion of MP3, OGG, FLAC, WAV to PCM16 (requires ffmpeg)
 
 ## Docker Compose Deployment (Recommended)
@@ -76,7 +77,7 @@ volumes:
   - ./output/audio:/output/audio
 ```
 
-Audio files are automatically saved to `./output/audio/` on your host machine with timestamp-based filenames that include the first 100 characters of the transcribed text (e.g., `audio_20251011_203145_123456_Hello_world_this_is_a_test.wav`). Special characters in the transcription are replaced with underscores for filesystem safety.
+Audio files are automatically saved to `./output/audio/` on your host machine. You may need to adjust file permissions of that folder first.
 
 **⚠️ Warning:** Audio files may contain sensitive information. Ensure proper access controls are in place when enabling this feature.
 
@@ -135,6 +136,7 @@ Configuration can be set via environment variables:
   - **bf16**: Best balance of speed/memory/accuracy (recommended for modern GPUs: RTX 30xx+, A100+)
   - **fp16**: Compatible with older GPUs, but less stable than bf16
   - Note: CPU always uses fp32 for stability. See `.env.example` for detailed trade-offs and recommendations.
+- `PROMPT` (optional) - Context/prompt for all transcriptions to enhance accuracy
 - `LOG_LEVEL` (default: INFO) - Logging level
 - `MAX_SECONDS` (default: 60) - Maximum audio duration in seconds
 - `SAMPLE_RATE` (default: 16000) - Expected audio sample rate in Hz
