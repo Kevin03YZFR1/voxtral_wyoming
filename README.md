@@ -65,6 +65,21 @@ volumes:
 
 Then set `MODEL_ID=/models/Voxtral-Mini-3B-2507` in your `.env` file.
 
+**Audio Saving:**
+
+To save all received audio input as WAV files (one per transcription request), set `SAVE_AUDIO=true` in your `.env` file. The audio files will be saved to the directory specified by `AUDIO_SAVE_DIR` (default: `./output/audio/`).
+
+The docker-compose.yml file includes a bind mount for the audio directory:
+
+```yaml
+volumes:
+  - ./output/audio:/output/audio
+```
+
+Audio files are automatically saved to `./output/audio/` on your host machine with timestamp-based filenames that include the first 100 characters of the transcribed text (e.g., `audio_20251011_203145_123456_Hello_world_this_is_a_test.wav`). Special characters in the transcription are replaced with underscores for filesystem safety.
+
+**⚠️ Warning:** Audio files may contain sensitive information. Ensure proper access controls are in place when enabling this feature.
+
 ## Docker Deployment (Alternative without Docker Compose)
 
 ### Building the Image
@@ -112,14 +127,20 @@ Configuration can be set via environment variables:
 
 - `HOST` (default: 0.0.0.0) - Bind host
 - `PORT` (default: 10300) - Bind port
-- `LANGUAGE` (default: en-US) - Language/locale hint
 - `MODEL_ID` ID Voxtral model to use: "mistralai/Voxtral-Mini-3B-2507" (default) or "mistralai/Voxtral-Small-24B-2507" (or other compatible variant from Hugging Face)
 - `DEVICE` (default: cuda) - Device: cpu|cuda|mps (automatically falls back to CPU if device fails)
-- `DATA_TYPE` (default: fp32) - Data type: fp32|fp16|bf16 (CPU forces fp32)
+- `DATA_TYPE` (default: bf16) - Data type for model weights: fp32|fp16|bf16
+  - **fp32**: Best accuracy, highest memory/slowest (recommended for CPU)
+  - **bf16**: Best balance of speed/memory/accuracy (recommended for modern GPUs: RTX 30xx+, A100+)
+  - **fp16**: Compatible with older GPUs, but less stable than bf16
+  - Note: CPU always uses fp32 for stability. See `.env.example` for detailed trade-offs and recommendations.
 - `LOG_LEVEL` (default: INFO) - Logging level
 - `MAX_SECONDS` (default: 60) - Maximum audio duration in seconds
-- `SAMPLE_RATE` (default: 16000) - Expected audio sample rate in Hz
 - `MAX_NEW_TOKENS` (default: 128) - Maximum generation length
+- `SAVE_AUDIO` (default: false) - Save all received audio input as WAV files (one per request)
+- `AUDIO_SAVE_DIR` (default: ./output/audio/) - Directory where audio files will be saved
+- `LANGUAGE_FALLBACK` (default: en-US) - Fallback language/locale hint. Will get overridden by the configuration of your Home Assistant Voice Assistant.
+- `SAMPLE_RATE_FALLBACK` (default: 16000) - Expected audio sample rate in Hz. Again just a fallback value which will get replaced by the information which Home Assistant provides through the Wyoming protocol.
 
 Checkout the `.env.example` for detailed documentation of all options.
 When directly executing python scripts without docker, you can also use equivalent command line arguments instead.
@@ -227,11 +248,10 @@ If Home Assistant can't connect:
 4. Check server logs for connection attempts
 
 ## Performance
-I haven't done extensive performance tests yet, but on my RTX 3090 most STT requests are handled in less than a second while using ~18GB VRAM.
+I haven't done extensive performance tests yet, but using the default configuration on my RTX 3090 most STT requests are handled in ~0.5s while using ~9GB VRAM.
 
 ## Online Alternative
 If you do not want to host Voxtral on your own, but rather use Mistral's online API, [ha-openai-whisper-stt-api is a nice HA addon provided by fabio-garavini](https://github.com/fabio-garavini/ha-openai-whisper-stt-api).
 
 ## Contributing
-
 Contributions are welcome!

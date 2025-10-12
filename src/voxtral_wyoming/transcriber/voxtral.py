@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pycountry import languages
+
 """Voxtral-backed transcriber implementation using Mistral's Voxtral model.
 
 Offline-only execution that loads local model files (no network calls).
@@ -15,10 +17,10 @@ from .base import ITranscriber, TranscriptionResult
 
 @dataclass
 class VoxtralConfig:
-    model_id: Optional[str] = os.getenv("MODEL_ID", "mistralai/Voxtral-Mini-3B-2507")
+    model_id: str = os.getenv("MODEL_ID", "mistralai/Voxtral-Mini-3B-2507")
     device: str = os.getenv("DEVICE", "cuda")
-    dtype: str = os.getenv("DATA_TYPE", "fp32")
-    language: Optional[str] = os.getenv("LANGUAGE")
+    dtype: str = os.getenv("DATA_TYPE", "bf16")  # fp32|fp16|bf16 - see .env.example for trade-offs
+    locale: str = os.getenv("LANGUAGE_FALLBACK", "en-US")
     max_new_tokens: int = int(os.getenv("MAX_NEW_TOKENS", "128"))
 
 
@@ -45,6 +47,13 @@ def _map_dtype(device: str, dtype_str: str):
         return torch.bfloat16
     if norm in ("fp16", "float16"):
         return torch.float16
+    if norm in ("fp32", "float32"):
+        return torch.float32
+
+    import logging
+    _logger = logging.getLogger("voxtral_wyoming.transcriber")
+    _logger.error(f"Unknown dtype: {dtype_str}. Falling back to fp32")
+
     return torch.float32
 
 
@@ -188,7 +197,7 @@ class VoxtralTranscriber(ITranscriber):
 
         self._loaded = True
 
-    def transcribe(self, audio_pcm: bytes, sample_rate: int, language: Optional[str] = None) -> TranscriptionResult:
+    def transcribe(self, audio_pcm: bytes, sample_rate: int, locale: Optional[str] = None) -> TranscriptionResult:
         # Lazy-load heavy deps and model
         self._ensure_loaded()
 
@@ -200,12 +209,15 @@ class VoxtralTranscriber(ITranscriber):
         # Start timing for overall transcription
         start_time = time.perf_counter()
 
+        locale = locale or self.config.locale
+        language_only = _locale_to_lang(locale)
+
         # Validate audio input - handle None case
         if audio_pcm is None:
             _logger.warning("Received None audio_pcm, returning empty transcription")
             return TranscriptionResult(
                 text="",
-                language=language or self.config.language or "en-US",
+                language=locale,
                 duration_sec=0.0,
                 confidence=None,
             )
@@ -237,7 +249,11 @@ class VoxtralTranscriber(ITranscriber):
 
         # Prepare audio as float32 numpy array in [-1, 1]
         wav = _pcm16_le_bytes_to_float32(audio_pcm)
-        lang = _locale_to_lang(language or self.config.language)
+
+        # Log transcription start with key parameters
+        _logger.info(
+            f"Starting transcription: language={locale}, sample_rate={sample_rate}Hz, model_id={self.config.model_id}"
+        )
 
         # Use native transcription API with numpy array input
         # This is the proper API for transcription-only use cases
@@ -245,7 +261,7 @@ class VoxtralTranscriber(ITranscriber):
         # can properly extract audio features using WhisperFeatureExtractor
         try:
             model_inputs = self._processor.apply_transcription_request(
-                language=lang or "en",
+                language=language_only,
                 audio=wav,
                 model_id=self.config.model_id,
                 sampling_rate=sample_rate,
@@ -318,7 +334,7 @@ class VoxtralTranscriber(ITranscriber):
 
         return TranscriptionResult(
             text=text,
-            language=language or self.config.language or "en-US",
+            language=locale,
             duration_sec=duration,
             confidence=None,
         )
