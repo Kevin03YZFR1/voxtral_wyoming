@@ -5,8 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HOST=0.0.0.0 \
     PORT=10300 \
-    LANGUAGE=en-US \
-    SAMPLE_RATE=16000 \
+    LANGUAGE_FALLBACK=en-US \
+    SAMPLE_RATE_FALLBACK=16000 \
     LOG_LEVEL=INFO
 
 # Install system dependencies and uv (global)

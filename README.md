@@ -127,7 +127,6 @@ Configuration can be set via environment variables:
 
 - `HOST` (default: 0.0.0.0) - Bind host
 - `PORT` (default: 10300) - Bind port
-- `LANGUAGE` (default: en-US) - Language/locale hint
 - `MODEL_ID` ID Voxtral model to use: "mistralai/Voxtral-Mini-3B-2507" (default) or "mistralai/Voxtral-Small-24B-2507" (or other compatible variant from Hugging Face)
 - `DEVICE` (default: cuda) - Device: cpu|cuda|mps (automatically falls back to CPU if device fails)
 - `DATA_TYPE` (default: bf16) - Data type for model weights: fp32|fp16|bf16
@@ -137,10 +136,11 @@ Configuration can be set via environment variables:
   - Note: CPU always uses fp32 for stability. See `.env.example` for detailed trade-offs and recommendations.
 - `LOG_LEVEL` (default: INFO) - Logging level
 - `MAX_SECONDS` (default: 60) - Maximum audio duration in seconds
-- `SAMPLE_RATE` (default: 16000) - Expected audio sample rate in Hz
 - `MAX_NEW_TOKENS` (default: 128) - Maximum generation length
 - `SAVE_AUDIO` (default: false) - Save all received audio input as WAV files (one per request)
 - `AUDIO_SAVE_DIR` (default: ./output/audio/) - Directory where audio files will be saved
+- `LANGUAGE_FALLBACK` (default: en-US) - Fallback language/locale hint. Will get overridden by the configuration of your Home Assistant Voice Assistant.
+- `SAMPLE_RATE_FALLBACK` (default: 16000) - Expected audio sample rate in Hz. Again just a fallback value which will get replaced by the information which Home Assistant provides through the Wyoming protocol.
 
 Checkout the `.env.example` for detailed documentation of all options.
 When directly executing python scripts without docker, you can also use equivalent command line arguments instead.

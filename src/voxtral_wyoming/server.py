@@ -14,8 +14,8 @@ from .audio import AudioSpec, clamp_audio_size, save_audio_as_wav
 # Environment variable defaults
 DEFAULT_HOST = os.getenv("HOST", "0.0.0.0")
 DEFAULT_PORT = int(os.getenv("PORT", "10300"))
-DEFAULT_LANGUAGE = os.getenv("LANGUAGE", "en-US")
-DEFAULT_SAMPLE_RATE = int(os.getenv("SAMPLE_RATE", "16000"))
+DEFAULT_LANGUAGE_FALLBACK = os.getenv("LANGUAGE_FALLBACK", "en-US")
+DEFAULT_SAMPLE_RATE_FALLBACK = int(os.getenv("SAMPLE_RATE_FALLBACK", "16000"))
 DEFAULT_LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 DEFAULT_MAX_SECONDS = int(os.getenv("MAX_SECONDS", "60"))
 DEFAULT_SAVE_AUDIO = os.getenv("SAVE_AUDIO", "false").lower() in ("true", "1", "yes")
@@ -171,7 +171,7 @@ async def _wyoming_handle_client(
                 audio_pcm = clamp_audio_size(bytes(audio), spec, max_seconds=max_seconds)
 
                 try:
-                    result = transcriber.transcribe(audio_pcm, sample_rate=sample_rate, language=lang_hint)
+                    result = transcriber.transcribe(audio_pcm, sample_rate=sample_rate, locale=lang_hint)
                     text = result.text or ""
                     lang_out = result.language or lang_hint
                 except Exception as e:
@@ -247,15 +247,15 @@ async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: 
 @click.option("--port", envvar="PORT", default=DEFAULT_PORT, type=int, show_default=True, help="Bind port")
 @click.option(
     "--language",
-    envvar="LANGUAGE",
-    default=DEFAULT_LANGUAGE,
+    envvar="LANGUAGE_FALLBACK",
+    default=DEFAULT_LANGUAGE_FALLBACK,
     show_default=True,
     help="Language/locale hint (e.g., en-US)",
 )
 @click.option(
     "--sample-rate",
-    envvar="SAMPLE_RATE",
-    default=DEFAULT_SAMPLE_RATE,
+    envvar="SAMPLE_RATE_FALLBACK",
+    default=DEFAULT_SAMPLE_RATE_FALLBACK,
     type=int,
     show_default=True,
     help="Expected audio sample rate (Hz)",

@@ -59,7 +59,7 @@ def transcribe_sample(
     host: str = "127.0.0.1",
     port: int = int(os.getenv("PORT", "10300")),
     url: str = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
-    sample_rate: int = int(os.getenv("SAMPLE_RATE", "16000")),
+    sample_rate: int = int(os.getenv("SAMPLE_RATE_FALLBACK", "16000")),
     convert: bool = True,
 ) -> dict:
     """
@@ -170,7 +170,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--host", default=os.getenv("HOST", "127.0.0.1"), help="Server host (default: 127.0.0.1 or $HOST)")
     parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "10300")), help="Server port (default: 10300 or $PORT)")
     parser.add_argument("--url", default="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", help="Audio file URL to transcribe")
-    parser.add_argument("--sample-rate", type=int, default=int(os.getenv("SAMPLE_RATE", "16000")), help="Target sample rate for PCM16 conversion")
+    parser.add_argument("--sample-rate", type=int, default=int(os.getenv("SAMPLE_RATE_FALLBACK", "16000")), help="Target sample rate for PCM16 conversion")
     parser.add_argument("--no-convert", action="store_true", help="Do not attempt conversion with ffmpeg; send bytes as-is")
 
     args = parser.parse_args(argv)
