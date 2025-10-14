@@ -391,6 +391,14 @@ class VoxtralTranscriber(ITranscriber):
             decoded = []
 
         text = (decoded[0] if decoded else "").strip()
+
+        # In chat mode, the model sometimes quotes the transcribed text
+        # Remove leading and trailing quotes
+        if self.config.use_chat_mode and text:
+            # Strip quotes iteratively to handle multiple layers
+            while text and text[0] in ('"', "'") and text[-1] in ('"', "'") and text[0] == text[-1]:
+                text = text[1:-1].strip()
+
         _logger.info(f"Final transcription text (length={len(text)} chars): {text[:100]}{'...' if len(text) > 100 else ''}")
         duration = len(audio_pcm) / float(2 * max(1, sample_rate)) if audio_pcm else 0.0
 
