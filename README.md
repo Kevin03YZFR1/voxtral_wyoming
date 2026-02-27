@@ -11,7 +11,7 @@ The goal is to provide a powerful drop-in alternative to the popular Whisper STT
 - 🐳 **Docker Ready**: Containerized deployment with non-root user
 - ⚡ **Device Flexibility**: CPU, CUDA (NVIDIA), or MPS (Apple Silicon) support
 - 💬 **Dual Mode Support**: Choose between optimized transcribe-only mode or chat mode with custom system prompts for domain-specific context
-- 🎵 **Audio Format Support**: Automatic conversion of MP3, OGG, FLAC, WAV to PCM16 (requires ffmpeg)
+
 
 ## Docker Compose Deployment (Recommended)
 
@@ -177,7 +177,7 @@ source .venv/bin/activate
 uv sync
 ```
 
-Requires Python and uv to be installed. Optionally, ffmpeg for audio conversion.
+Requires Python and uv to be installed.
 
 ### Running the Server (Development)
 
@@ -209,7 +209,7 @@ python examples/client_sample.py /path/to/custom.env
 HOST=127.0.0.1 PORT=10300 SAMPLE_URL=https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3 python examples/client_sample.py
 ```
 
-The client will automatically attempt to convert audio to PCM16 mono using ffmpeg if available and enabled.
+The sample client will automatically attempt to convert audio to PCM16 mono using ffmpeg if available and enabled. Note: The server expects PCM16 mono audio at 16kHz as per the Wyoming protocol standard.
 
 ## Updating to a New Version
 
@@ -277,24 +277,6 @@ change settings on your local setup.
 If you see "model not found" errors:
 1. Ensure `MODEL_ID` points to a valid model id from Hugging Face
 2. Or ensure the model is in your HuggingFace cache (run `huggingface-cli download mistralai/Voxtral-Mini-3B-2507`)
-
-### Audio Format Errors
-
-If you see audio format errors:
-1. Install ffmpeg: `apt-get install ffmpeg` (Linux) or `brew install ffmpeg` (macOS)
-2. Or convert audio to PCM16 manually before sending:
-   ```bash
-   ffmpeg -i input.mp3 -f s16le -acodec pcm_s16le -ac 1 -ar 16000 output.pcm
-   ```
-
-### Adding ffmpeg for Audio Format Support (Optional)
-
-To enable server-side audio format conversion, add ffmpeg to your Dockerfile:
-
-```dockerfile
-# Add this line after the base image declaration
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
-```
 
 
 ### GPU Not Working

@@ -115,74 +115,6 @@ def _map_dtype(dtype_str: Optional[str]):
     return None
 
 
-def _detect_audio_format(audio_bytes: bytes) -> str:
-    """Detect audio format from byte signature.
-
-    Returns: 'pcm', 'mp3', 'wav', 'ogg', 'flac', or 'unknown'
-    """
-    if not audio_bytes or len(audio_bytes) < 4:
-        return "unknown"
-
-    # Check for common audio format signatures
-    if audio_bytes[:4] == b'RIFF' and len(audio_bytes) >= 12 and audio_bytes[8:12] == b'WAVE':
-        return "wav"
-    elif audio_bytes[:3] == b'ID3' or audio_bytes[:2] == b'\xff\xfb' or audio_bytes[:2] == b'\xff\xf3':
-        return "mp3"
-    elif audio_bytes[:4] == b'OggS':
-        return "ogg"
-    elif audio_bytes[:4] == b'fLaC':
-        return "flac"
-
-    # Heuristic: if it looks like mostly small values typical of PCM16, assume PCM
-    # This is not foolproof but helps distinguish PCM from compressed formats
-    return "pcm"
-
-
-def _convert_to_pcm16_with_ffmpeg(audio_bytes: bytes, sample_rate: int = 16000) -> tuple[bytes, bool]:
-    """
-    Convert input audio (mp3/wav/ogg/flac/etc.) to raw PCM16 mono at the given sample_rate using ffmpeg.
-
-    Returns (converted_bytes, success).
-    If ffmpeg is not available or conversion fails, returns original bytes and False.
-    """
-    import shutil
-    import subprocess
-
-    ffmpeg_path = shutil.which("ffmpeg")
-    if not ffmpeg_path:
-        return audio_bytes, False
-
-    try:
-        proc = subprocess.run(
-            [
-                ffmpeg_path,
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-i",
-                "-",  # Read from stdin
-                "-f",
-                "s16le",  # Output format: signed 16-bit little-endian
-                "-acodec",
-                "pcm_s16le",  # Audio codec: PCM 16-bit
-                "-ac",
-                "1",  # Mono (1 channel)
-                "-ar",
-                str(sample_rate),  # Sample rate
-                "-",  # Write to stdout
-            ],
-            input=audio_bytes,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=True,
-            timeout=30,  # Prevent hanging on very large files
-        )
-        return proc.stdout, True
-    except Exception:
-        # Conversion failed - return original bytes
-        return audio_bytes, False
-
-
 def _pcm16_le_bytes_to_float32(audio_pcm: bytes):
     # Convert little-endian PCM16 mono to float32 in [-1, 1]
     try:
@@ -340,31 +272,6 @@ class VoxtralTranscriber(ITranscriber):
                 duration_sec=0.0,
                 confidence=None,
             )
-
-        # Validate and potentially convert audio format
-        # Allow empty audio to pass through (will return empty/minimal transcription)
-        if audio_pcm:
-            audio_format = _detect_audio_format(audio_pcm)
-            if audio_format not in ("pcm", "unknown"):
-                # Known compressed format detected - attempt automatic conversion
-                _logger.info(
-                    f"Audio format '{audio_format}' detected, attempting automatic conversion to PCM16 using ffmpeg..."
-                )
-                converted_audio, success = _convert_to_pcm16_with_ffmpeg(audio_pcm, sample_rate)
-
-                if success:
-                    _logger.info(f"Successfully converted {audio_format} to PCM16 ({len(converted_audio)} bytes)")
-                    audio_pcm = converted_audio
-                else:
-                    # Conversion failed - provide clear error
-                    raise ValueError(
-                        f"Audio format '{audio_format}' detected, but automatic conversion to PCM16 failed. "
-                        f"This usually means ffmpeg is not available on the server. "
-                        f"Please either:\n"
-                        f"  1. Install ffmpeg on the server, or\n"
-                        f"  2. Convert audio to PCM16 format before sending:\n"
-                        f"     ffmpeg -i input.{audio_format} -f s16le -acodec pcm_s16le -ac 1 -ar {sample_rate} output.pcm"
-                    )
 
         # Prepare audio as float32 numpy array in [-1, 1]
         wav = _pcm16_le_bytes_to_float32(audio_pcm)
