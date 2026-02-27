@@ -128,7 +128,11 @@ Configuration can be set via environment variables:
 
 - `HOST` (default: 0.0.0.0) - Bind host
 - `PORT` (default: 10300) - Bind port
-- `MODEL_ID` ID Voxtral model to use: "mistralai/Voxtral-Mini-3B-2507" (default) or "mistralai/Voxtral-Small-24B-2507" (or other compatible variant from Hugging Face)
+- `MODEL_ID` ID Voxtral model to use
+  - "mistralai/Voxtral-Mini-3B-2507" (default)
+  - or "mistralai/Voxtral-Small-24B-2507"
+  - or [other compatible variant from Hugging Face](https://huggingface.co/models?other=voxtral)
+      - [e.g. a quantized one](https://huggingface.co/models?other=base_model:quantized:mistralai/Voxtral-Mini-3B-2507)
 - `DEVICE` (default: cuda) - Device: cpu|cuda|mps (automatically falls back to CPU if device fails)
 - `DATA_TYPE` (default: auto-detect) - Data type override (optional, leave unset for auto-detection)
   - Override to bf16 or fp16 when loading fp32 models on GPU for memory savings
@@ -249,8 +253,15 @@ If Home Assistant can't connect:
 3. Verify network connectivity between Home Assistant and the server
 4. Check server logs for connection attempts
 
-## Performance
-I haven't done extensive performance tests yet, but using the default configuration on my RTX 3090 most STT requests are handled in ~0.5s while using ~9GB VRAM.
+## Hardware & Performance
+Running Voxtral is relatively hardware-intensive. It is highly recommended to use a GPU with at least 10GB VRAM for optimal performance. It also does not need to be the latest top model, though.
+
+Personally, I'm currently using a RTX 3090. Having reduced memory requirements by setting `DATA_TYPE=bf16`, most STT requests are handled in ~0.5s while using ~9GB VRAM.
+
+Check out the `DATA_TYPE` parameter, if you're having memory troubles.
+
+I can't really recommend running the model on CPU only. Anyway, if you want to give it a shot, I suggest using [one of the quantized models](https://huggingface.co/models?other=base_model:quantized:mistralai/Voxtral-Mini-3B-2507) for the `MODEL_ID` option to further reduce required resources.
+
 
 ## Online Alternative
 If you do not want to host Voxtral on your own, but rather use Mistral's online API, [ha-openai-whisper-stt-api is a nice HA addon provided by fabio-garavini](https://github.com/fabio-garavini/ha-openai-whisper-stt-api).
