@@ -12,6 +12,10 @@ The goal is to provide a powerful drop-in alternative to the popular Whisper STT
 - ⚡ **Device Flexibility**: CPU, CUDA (NVIDIA), or MPS (Apple Silicon) support
 - 💬 **Dual Mode Support**: Choose between optimized transcribe-only mode or chat mode with custom system prompts for domain-specific context
 
+## TLDR
+
+Run `cp .env.example .env`, configure settings, then `docker compose up --build -d`. Add as Wyoming integration in Home Assistant.
+
 
 ## Docker Compose Deployment (Recommended)
 
