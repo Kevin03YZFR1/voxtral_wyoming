@@ -124,7 +124,19 @@ Now you can choose `voxtral-wyoming` as the Speech-to-text option within any of 
 
 ## Configuration
 
-Configuration can be set via environment variables:
+All configuration is done via environment variables. The easiest way is to use a `.env` file:
+
+1. **Copy the environment template:**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Edit `.env` to configure your setup:**
+   ```bash
+   vim .env
+   ```
+
+### Key Configuration Options
 
 - `HOST` (default: 0.0.0.0) - Bind host
 - `PORT` (default: 10300) - Bind port
@@ -148,8 +160,7 @@ Configuration can be set via environment variables:
 - `LANGUAGE_FALLBACK` (default: en-US) - Fallback language/locale hint. Will get overridden by the configuration of your Home Assistant Voice Assistant.
 - `SAMPLE_RATE_FALLBACK` (default: 16000) - Expected audio sample rate in Hz. Again just a fallback value which will get replaced by the information which Home Assistant provides through the Wyoming protocol.
 
-Checkout the `.env.example` for detailed documentation of all options.
-When directly executing python scripts without docker, you can also use equivalent command line arguments instead.
+See `.env.example` for detailed documentation of all options.
 
 ## Development
 
@@ -166,44 +177,34 @@ Requires Python and uv to be installed. Optionally, ffmpeg for audio conversion.
 ### Running the Server (Development)
 
 ```bash
-voxtral-wyoming --host 0.0.0.0 --port 10300 --language en-US
+# Use default .env file
+voxtral-wyoming
 
-# Available options:
-#   --host HOST           Bind host (default: 0.0.0.0)
-#   --port PORT           Bind port (default: 10300)
-#   --language LANG       Language/locale hint (default: en-US)
-#   --sample-rate RATE    Expected audio sample rate in Hz (default: 16000)
-#   --max-seconds SEC     Clamp incoming audio to max seconds (default: 60)
-#   --log-level LEVEL     Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO)
+# Or specify a custom environment file
+voxtral-wyoming /path/to/custom.env
+
+# Or use environment variables directly
+HOST=0.0.0.0 PORT=10300 LANGUAGE_FALLBACK=en-US voxtral-wyoming
 ```
+
+All configuration is done via environment variables loaded from a `.env` file (default) or a custom environment file specified as the only command-line argument.
 
 ### Testing with Sample Audio
 
 Use the example client to test transcription:
 
 ```bash
-# Test with a sample audio file from HuggingFace
-python examples/client_sample.py \
-  --host 127.0.0.1 \
-  --port 10300 \
-  --url https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3
+# Use default .env file
+python examples/client_sample.py
 
-# Or test with a local audio file
-python examples/client_sample.py \
-  --host 127.0.0.1 \
-  --port 10300 \
-  --file /path/to/audio.wav
+# Or specify a custom environment file
+python examples/client_sample.py /path/to/custom.env
 
-# Options:
-#   --host HOST          Server host (default: 127.0.0.1)
-#   --port PORT          Server port (default: 10300)
-#   --url URL            Download and transcribe audio from URL
-#   --file FILE          Transcribe local audio file
-#   --language LANG      Language hint (default: en-US)
-#   --no-convert         Skip ffmpeg conversion (send raw bytes)
+# Or use environment variables directly
+HOST=127.0.0.1 PORT=10300 SAMPLE_URL=https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3 python examples/client_sample.py
 ```
 
-The client will automatically attempt to convert audio to PCM16 mono 16 kHz using ffmpeg if available.
+The client will automatically attempt to convert audio to PCM16 mono using ffmpeg if available and enabled.
 
 ## Troubleshooting
 

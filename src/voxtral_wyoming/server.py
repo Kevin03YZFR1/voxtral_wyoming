@@ -3,23 +3,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 import time
+from pathlib import Path
 
-import click
+from dotenv import load_dotenv
 
 from .transcriber.voxtral import VoxtralTranscriber, VoxtralConfig
 from .transcriber.base import ITranscriber
 from .audio import AudioSpec, clamp_audio_size, save_audio_as_wav
-
-# Environment variable defaults
-DEFAULT_HOST = os.getenv("HOST", "0.0.0.0")
-DEFAULT_PORT = int(os.getenv("PORT", "10300"))
-DEFAULT_LANGUAGE_FALLBACK = os.getenv("LANGUAGE_FALLBACK", "en-US")
-DEFAULT_SAMPLE_RATE_FALLBACK = int(os.getenv("SAMPLE_RATE_FALLBACK", "16000"))
-DEFAULT_LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-DEFAULT_MAX_SECONDS = int(os.getenv("MAX_SECONDS", "60"))
-DEFAULT_SAVE_AUDIO = os.getenv("SAVE_AUDIO", "false").lower() in ("true", "1", "yes")
-DEFAULT_AUDIO_SAVE_DIR = os.getenv("AUDIO_SAVE_DIR", "/output/audio")
 
 # Voxtral supported languages
 # see https://huggingface.co/mistralai/Voxtral-Mini-3B-2507
@@ -242,58 +234,37 @@ async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: 
         await server.serve_forever()
 
 
-@click.command(context_settings={"help_option_names": ["-h", "--help"]})
-@click.option("--host", envvar="HOST", default=DEFAULT_HOST, show_default=True, help="Bind host")
-@click.option("--port", envvar="PORT", default=DEFAULT_PORT, type=int, show_default=True, help="Bind port")
-@click.option(
-    "--language",
-    envvar="LANGUAGE_FALLBACK",
-    default=DEFAULT_LANGUAGE_FALLBACK,
-    show_default=True,
-    help="Language/locale hint (e.g., en-US)",
-)
-@click.option(
-    "--sample-rate",
-    envvar="SAMPLE_RATE_FALLBACK",
-    default=DEFAULT_SAMPLE_RATE_FALLBACK,
-    type=int,
-    show_default=True,
-    help="Expected audio sample rate (Hz)",
-)
-@click.option(
-    "--max-seconds",
-    envvar="MAX_SECONDS",
-    default=DEFAULT_MAX_SECONDS,
-    type=int,
-    show_default=True,
-    help="Clamp incoming audio to this many seconds (safety)",
-)
-@click.option(
-    "--log-level",
-    envvar="LOG_LEVEL",
-    default=DEFAULT_LOG_LEVEL,
-    show_default=True,
-    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False),
-    help="Logging level",
-)
-@click.option(
-    "--save-audio",
-    envvar="SAVE_AUDIO",
-    default=DEFAULT_SAVE_AUDIO,
-    is_flag=True,
-    show_default=True,
-    help="Save all received audio input as WAV files (one per request)",
-)
-@click.option(
-    "--audio-save-dir",
-    envvar="AUDIO_SAVE_DIR",
-    default=DEFAULT_AUDIO_SAVE_DIR,
-    show_default=True,
-    help="Directory where audio files will be saved",
-)
-def cli(host: str, port: int, language: str, sample_rate: int, max_seconds: int, log_level: str, save_audio: bool, audio_save_dir: str) -> None:
+def cli() -> None:
     """Start the Voxtral Wyoming STT service using the Wyoming protocol and Voxtral backend."""
-    logging.basicConfig(level=getattr(logging, log_level.upper(), logging.INFO), format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
+    # Parse command line argument for env file
+    env_file = ".env"
+    env_file_explicitly_specified = False
+    if len(sys.argv) > 1:
+        env_file = sys.argv[1]
+        env_file_explicitly_specified = True
+
+    # Load environment variables from the specified file
+    env_path = Path(env_file)
+    if env_path.exists():
+        load_dotenv(env_path)
+        _LOGGER.info(f"Loaded environment variables from {env_file}")
+    else:
+        if env_file_explicitly_specified:
+            _LOGGER.error(f"Environment file {env_file} not found, using system environment variables only")
+        else:
+            _LOGGER.warning(f"Environment file {env_file} not found, using system environment variables only")
+
+    # Read configuration from environment variables
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "10300"))
+    language = os.getenv("LANGUAGE_FALLBACK", "en-US")
+    sample_rate = int(os.getenv("SAMPLE_RATE_FALLBACK", "16000"))
+    max_seconds = int(os.getenv("MAX_SECONDS", "60"))
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    save_audio = os.getenv("SAVE_AUDIO", "false").lower() in ("true", "1", "yes")
+    audio_save_dir = os.getenv("AUDIO_SAVE_DIR", "/output/audio")
+
+    logging.basicConfig(level=getattr(logging, log_level, logging.INFO), format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
     _LOGGER.info(
         "Starting Voxtral Wyoming STT on %s:%d | language=%s sample_rate=%d max_seconds=%d",
         host,

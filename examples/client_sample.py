@@ -7,7 +7,10 @@ import subprocess
 import sys
 import shutil
 import urllib.request
+from pathlib import Path
 from typing import Optional
+
+from dotenv import load_dotenv
 
 
 def _download(url: str) -> bytes:
@@ -164,24 +167,36 @@ def transcribe_sample(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    import argparse
+    # Parse command line argument for env file
+    env_file = ".env"
+    env_file_explicitly_specified = False
+    if argv is None:
+        argv = sys.argv[1:]
+    if len(argv) > 0:
+        env_file = argv[0]
+        env_file_explicitly_specified = True
 
-    parser = argparse.ArgumentParser(description="Send sample audio to voxtral-wyoming server and print transcript")
-    parser.add_argument("--host", default=os.getenv("HOST", "127.0.0.1"), help="Server host (default: 127.0.0.1 or $HOST)")
-    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "10300")), help="Server port (default: 10300 or $PORT)")
-    parser.add_argument("--url", default="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", help="Audio file URL to transcribe")
-    parser.add_argument("--sample-rate", type=int, default=int(os.getenv("SAMPLE_RATE_FALLBACK", "16000")), help="Target sample rate for PCM16 conversion")
-    parser.add_argument("--no-convert", action="store_true", help="Do not attempt conversion with ffmpeg; send bytes as-is")
+    # Load environment variables from the specified file
+    env_path = Path(env_file)
+    if env_path.exists():
+        load_dotenv(env_path)
+    elif env_file_explicitly_specified:
+        print(f"Error: Environment file {env_file} not found, using system environment variables only", file=sys.stderr)
 
-    args = parser.parse_args(argv)
+    # Read configuration from environment variables
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "10300"))
+    url = os.getenv("SAMPLE_URL", "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3")
+    sample_rate = int(os.getenv("SAMPLE_RATE_FALLBACK", "16000"))
+    convert = os.getenv("CONVERT_AUDIO", "true").lower() in ("true", "1", "yes")
 
     try:
         result = transcribe_sample(
-            host=args.host,
-            port=args.port,
-            url=args.url,
-            sample_rate=args.sample_rate,
-            convert=not args.no_convert,
+            host=host,
+            port=port,
+            url=url,
+            sample_rate=sample_rate,
+            convert=convert,
         )
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
