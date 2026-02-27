@@ -53,7 +53,7 @@ deploy:
           capabilities: [gpu]
 ```
 
-Then set `DEVICE=cuda` in your `.env` file.
+Then set `DEVICE=cuda` in your `.env` file (or leave it as `DEVICE=auto` for automatic detection).
 
 **Local Model Files:**
 
@@ -145,7 +145,12 @@ All configuration is done via environment variables. The easiest way is to use a
   - or "mistralai/Voxtral-Small-24B-2507"
   - or [other compatible variant from Hugging Face](https://huggingface.co/models?other=voxtral)
       - [e.g. a quantized one](https://huggingface.co/models?other=base_model:quantized:mistralai/Voxtral-Mini-3B-2507)
-- `DEVICE` (default: cuda) - Device: cpu|cuda|mps (automatically falls back to CPU if device fails)
+- `DEVICE` (default: auto) - Device selection:
+  - `auto`: Automatically detect best device (cuda for NVIDIA GPU, mps for Apple Silicon, or cpu as fallback) - RECOMMENDED
+  - `cuda`: Force NVIDIA GPU usage
+  - `mps`: Force Apple Silicon GPU usage
+  - `cpu`: Force CPU usage
+  - Note: Automatically falls back to CPU if manually specified device is unavailable
 - `DATA_TYPE` (default: auto-detect) - Data type override (optional, leave unset for auto-detection)
   - Override to bf16 or fp16 when loading fp32 models on GPU for memory savings
 - `LOG_LEVEL` (default: INFO) - Logging level

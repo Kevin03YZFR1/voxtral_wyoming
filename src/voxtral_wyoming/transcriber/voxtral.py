@@ -11,14 +11,52 @@ import os
 import time
 from dataclasses import dataclass
 from typing import Optional
+import logging
 
 from .base import ITranscriber, TranscriptionResult
+
+_logger = logging.getLogger("voxtral_wyoming.transcriber")
+
+
+def _detect_device() -> str:
+    """Automatically detect the best available device for inference.
+
+    Returns:
+        Device string: 'cuda' for NVIDIA GPU, 'mps' for Apple Silicon, 'cpu' otherwise
+    """
+    try:
+        import torch  # type: ignore
+
+        # Check for NVIDIA GPU
+        if torch.cuda.is_available():
+            device = "cuda"
+            _logger.info(f"Auto-detected device: {device} (NVIDIA GPU available)")
+            return device
+
+        # Check for Apple Silicon
+        if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            device = "mps"
+            _logger.info(f"Auto-detected device: {device} (Apple Silicon available)")
+            return device
+
+        # Fallback to CPU
+        device = "cpu"
+        _logger.info(f"Auto-detected device: {device} (no GPU available)")
+        return device
+
+    except ImportError:
+        # PyTorch not available yet, default to CPU
+        _logger.warning("PyTorch not available for device detection, defaulting to CPU")
+        return "cpu"
+    except Exception as e:
+        _logger.warning(f"Error during device detection: {e}, defaulting to CPU")
+        return "cpu"
 
 
 @dataclass
 class VoxtralConfig:
     model_id: str = os.getenv("MODEL_ID", "mistralai/Voxtral-Mini-3B-2507")
-    device: str = os.getenv("DEVICE", "cuda")
+    device: str = os.getenv("DEVICE", "auto")
     dtype: Optional[str] = os.getenv("DATA_TYPE", None)  # None=auto-detect, see .env.example for trade-offs
     locale: str = os.getenv("LANGUAGE_FALLBACK", "en-US")
     max_new_tokens: int = int(os.getenv("MAX_NEW_TOKENS", "128"))
@@ -194,7 +232,14 @@ class VoxtralTranscriber(ITranscriber):
         self._loaded = False
         self._processor = None
         self._model = None
-        self._device = self.config.device
+
+        # Auto-detect device if set to 'auto'
+        if self.config.device.lower() == "auto":
+            self._device = _detect_device()
+        else:
+            self._device = self.config.device
+            _logger.info(f"Using manually configured device: {self._device}")
+
         self._dtype = None
 
         # Preload everything on server startup to prevent slowing down first request
