@@ -19,7 +19,7 @@ from .base import ITranscriber, TranscriptionResult
 class VoxtralConfig:
     model_id: str = os.getenv("MODEL_ID", "mistralai/Voxtral-Mini-3B-2507")
     device: str = os.getenv("DEVICE", "cuda")
-    dtype: str = os.getenv("DATA_TYPE", "bf16")  # fp32|fp16|bf16 - see .env.example for trade-offs
+    dtype: Optional[str] = os.getenv("DATA_TYPE", None)  # None=auto-detect, see .env.example for trade-offs
     locale: str = os.getenv("LANGUAGE_FALLBACK", "en-US")
     max_new_tokens: int = int(os.getenv("MAX_NEW_TOKENS", "128"))
     use_chat_mode: bool = os.getenv("USE_CHAT_MODE", "false").lower() in ("true", "1", "yes")
@@ -38,7 +38,16 @@ def _locale_to_lang(locale: Optional[str]) -> Optional[str]:
     return locale.split("-")[0].split("_")[0]
 
 
-def _map_dtype(device: str, dtype_str: str):
+def _map_dtype(device: str, dtype_str: Optional[str]):
+    """Map dtype string to torch dtype or return None for auto-detection.
+
+    Args:
+        device: Target device (cpu, cuda, mps)
+        dtype_str: Data type string or None for auto-detection
+
+    Returns:
+        torch dtype, quantization string, or None for auto-detection
+    """
     try:
         import torch  # type: ignore
     except Exception as e:  # pragma: no cover - only when voxtral backend is used
@@ -46,22 +55,35 @@ def _map_dtype(device: str, dtype_str: str):
             "PyTorch is required for VoxtralTranscriber. Install torch >= 2.3."
         ) from e
 
+    # None or empty means auto-detect from model files
+    if dtype_str is None or dtype_str == "" or dtype_str.lower() in ("auto", "none"):
+        return None
+
     norm = dtype_str.lower()
+
+    # CPU always uses fp32 for stability, regardless of requested dtype
     if device == "cpu":
-        # Keep it safe/portable on CPU by default
+        import logging
+        _logger = logging.getLogger("voxtral_wyoming.transcriber")
+        if norm != "fp32":
+            _logger.info(f"CPU device detected: overriding requested dtype '{dtype_str}' with fp32 for stability")
         return torch.float32
+
+    # Standard torch dtypes
     if norm in ("bf16", "bfloat16"):
         return torch.bfloat16
-    if norm in ("fp16", "float16"):
+    if norm in ("fp16", "float16", "f16"):
         return torch.float16
     if norm in ("fp32", "float32"):
         return torch.float32
+    if norm in ("fp8", "float8"):
+        return torch.float8_e4m3fn  # FP8 E4M3 format (most common)
 
     import logging
     _logger = logging.getLogger("voxtral_wyoming.transcriber")
-    _logger.error(f"Unknown dtype: {dtype_str}. Falling back to fp32")
+    _logger.warning(f"Unknown dtype: {dtype_str}. Using auto-detection instead")
 
-    return torch.float32
+    return None
 
 
 def _detect_audio_format(audio_bytes: bytes) -> str:
@@ -199,26 +221,59 @@ class VoxtralTranscriber(ITranscriber):
             ) from e
 
         import torch  # type: ignore
+        import logging
+
+        _logger = logging.getLogger("voxtral_wyoming.transcriber")
 
         model_id = self.config.model_id
         local_only = False
 
-        # Resolve dtype
+        # Resolve dtype - None means auto-detect from model
         self._dtype = _map_dtype(self._device, self.config.dtype)
+
+        # Log dtype selection
+        if self._dtype is None:
+            _logger.info(f"Loading model {model_id} with auto-detected data type from model files")
+        else:
+            dtype_display = str(self._dtype) if hasattr(self._dtype, '__name__') else self._dtype
+            _logger.info(f"Loading model {model_id} with manually specified data type: {dtype_display}")
 
         # Load processor and model from local files/cache
         self._processor = AutoProcessor.from_pretrained(model_id, local_files_only=local_only)
-        self._model = VoxtralForConditionalGeneration.from_pretrained(
-            model_id,
-            dtype=self._dtype,
-            local_files_only=local_only,
-        )
+
+        # Load model with dtype parameter (None = auto-detect)
+        if self._dtype is None:
+            # Let transformers auto-detect dtype from model files
+            self._model = VoxtralForConditionalGeneration.from_pretrained(
+                model_id,
+                local_files_only=local_only,
+            )
+        else:
+            # Use explicitly specified dtype
+            self._model = VoxtralForConditionalGeneration.from_pretrained(
+                model_id,
+                dtype=self._dtype,
+                local_files_only=local_only,
+            )
+
+        # Log the actual dtype that was loaded
+        if hasattr(self._model, 'dtype'):
+            _logger.info(f"Model loaded successfully with data type: {self._model.dtype}")
+        else:
+            # Try to infer from first parameter
+            try:
+                first_param_dtype = next(self._model.parameters()).dtype
+                _logger.info(f"Model loaded successfully with data type: {first_param_dtype}")
+            except:
+                _logger.info(f"Model loaded successfully (data type detection unavailable)")
+
         # Move to device explicitly and set eval mode
         try:
             if self._device:
                 self._model.to(self._device)
         except Exception:
             # Fallback to CPU if device move fails
+            _logger.warning(f"Failed to move model to {self._device}, falling back to CPU")
             self._device = "cpu"
             self._model.to("cpu")
         self._model.eval()

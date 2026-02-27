@@ -130,11 +130,10 @@ Configuration can be set via environment variables:
 - `PORT` (default: 10300) - Bind port
 - `MODEL_ID` ID Voxtral model to use: "mistralai/Voxtral-Mini-3B-2507" (default) or "mistralai/Voxtral-Small-24B-2507" (or other compatible variant from Hugging Face)
 - `DEVICE` (default: cuda) - Device: cpu|cuda|mps (automatically falls back to CPU if device fails)
-- `DATA_TYPE` (default: bf16) - Data type for model weights: fp32|fp16|bf16
-  - **fp32**: Best accuracy, highest memory/slowest (recommended for CPU)
-  - **bf16**: Best balance of speed/memory/accuracy (recommended for modern GPUs: RTX 30xx+, A100+)
-  - **fp16**: Compatible with older GPUs, but less stable than bf16
-  - Note: CPU always uses fp32 for stability. See `.env.example` for detailed trade-offs and recommendations.
+- `DATA_TYPE` (default: auto-detect) - Data type override (optional, leave unset for auto-detection)
+  - Override to bf16 or fp16 when loading fp32 models on GPU for memory savings
+  - CPU always uses fp32 for stability
+  - Quantized models auto-detect their data type from model files
 - `LOG_LEVEL` (default: INFO) - Logging level
 - `MAX_SECONDS` (default: 60) - Maximum audio duration in seconds
 - `MAX_NEW_TOKENS` (default: 128) - Maximum generation length
