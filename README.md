@@ -305,6 +305,38 @@ If CUDA/GPU is not detected:
 3. Check GPU availability: `python -c "import torch; print(torch.cuda.is_available())"`
 4. The server will automatically fall back to CPU if GPU initialization fails
 
+### CUDA Compute Capability Error
+
+If you see an error like:
+```
+Found GPU0 NVIDIA GeForce GTX 1070 which is of cuda capability 6.1.
+Minimum and Maximum cuda capability supported by this version of PyTorch is (7.0) - (12.0)
+```
+
+This means your GPU is too old for the installed PyTorch version. **Solution:**
+
+1. **Check your PyTorch version:**
+   ```bash
+   python -c "import torch; print(torch.__version__)"
+   ```
+
+2. **If using PyTorch 2.8 or newer**, you need to downgrade to PyTorch 2.5 or earlier (which support CUDA compute capability 6.1):
+
+   **For pip installations:**
+   ```bash
+   pip install 'torch>=2.4.0,<2.6.0' --index-url https://download.pytorch.org/whl/cu121
+   ```
+
+   **For uv installations:**
+   ```bash
+   uv pip install 'torch>=2.4.0,<2.6.0'
+   ```
+
+3. **For Docker users**, rebuild the image after ensuring `pyproject.toml` has the correct PyTorch version constraint:
+   ```bash
+   docker compose up --build -d
+   ```
+
 ### Connection Issues with Home Assistant
 
 If Home Assistant can't connect:
