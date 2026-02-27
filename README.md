@@ -116,9 +116,12 @@ docker run --rm -it --gpus all \
 First of all, make sure that you've started the Voxtral Wyoming server as described above.
 
 You don't need to install any HA addon, but just configure a new Wyoming integration:
-1. In Home Assistant, go to **Settings** → **Devices & services** → **Add integration**
-2. Select **Wyoming Protocol**
-3. Enter the server host and port as configured during your server setup and confirm
+
+1. Click the button below (or manually go to **Settings** → **Devices & services** → **Add integration** and select **Wyoming Protocol**):
+
+   [![Add Integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=wyoming)
+
+2. Enter the server host and port as configured during your server setup and confirm
 
 Now you can choose `voxtral-wyoming` as the Speech-to-text option within any of your configured Assistants on **Settings** → **Voice assistants**.
 
