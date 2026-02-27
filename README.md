@@ -132,8 +132,6 @@ Configuration can be set via environment variables:
 - `DEVICE` (default: cuda) - Device: cpu|cuda|mps (automatically falls back to CPU if device fails)
 - `DATA_TYPE` (default: auto-detect) - Data type override (optional, leave unset for auto-detection)
   - Override to bf16 or fp16 when loading fp32 models on GPU for memory savings
-  - CPU always uses fp32 for stability
-  - Quantized models auto-detect their data type from model files
 - `LOG_LEVEL` (default: INFO) - Logging level
 - `MAX_SECONDS` (default: 60) - Maximum audio duration in seconds
 - `MAX_NEW_TOKENS` (default: 128) - Maximum generation length

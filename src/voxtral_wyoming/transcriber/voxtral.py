@@ -38,11 +38,10 @@ def _locale_to_lang(locale: Optional[str]) -> Optional[str]:
     return locale.split("-")[0].split("_")[0]
 
 
-def _map_dtype(device: str, dtype_str: Optional[str]):
+def _map_dtype(dtype_str: Optional[str]):
     """Map dtype string to torch dtype or return None for auto-detection.
 
     Args:
-        device: Target device (cpu, cuda, mps)
         dtype_str: Data type string or None for auto-detection
 
     Returns:
@@ -60,14 +59,6 @@ def _map_dtype(device: str, dtype_str: Optional[str]):
         return None
 
     norm = dtype_str.lower()
-
-    # CPU always uses fp32 for stability, regardless of requested dtype
-    if device == "cpu":
-        import logging
-        _logger = logging.getLogger("voxtral_wyoming.transcriber")
-        if norm != "fp32":
-            _logger.info(f"CPU device detected: overriding requested dtype '{dtype_str}' with fp32 for stability")
-        return torch.float32
 
     # Standard torch dtypes
     if norm in ("bf16", "bfloat16"):
@@ -229,7 +220,7 @@ class VoxtralTranscriber(ITranscriber):
         local_only = False
 
         # Resolve dtype - None means auto-detect from model
-        self._dtype = _map_dtype(self._device, self.config.dtype)
+        self._dtype = _map_dtype(self.config.dtype)
 
         # Log dtype selection
         if self._dtype is None:
