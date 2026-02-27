@@ -211,6 +211,60 @@ HOST=127.0.0.1 PORT=10300 SAMPLE_URL=https://huggingface.co/datasets/hf-internal
 
 The client will automatically attempt to convert audio to PCM16 mono using ffmpeg if available and enabled.
 
+## Updating to a New Version
+
+### Docker Compose (Recommended)
+
+To update to the latest version:
+
+```bash
+# Pull the latest changes
+git pull
+
+# Rebuild and restart
+docker compose up --build -d
+
+# View logs to verify the update
+docker compose logs -f
+```
+
+### Docker (without Docker Compose)
+
+```bash
+# Pull the latest changes
+git pull
+
+# Rebuild the image
+docker build -t voxtral-wyoming:latest .
+
+# Stop and remove the old container
+docker stop <container_name>
+docker rm <container_name>
+
+# Start the new container with your existing configuration
+docker run --rm -it -p 10300:10300 voxtral-wyoming:latest
+```
+
+### Development Installation
+
+```bash
+# Pull the latest changes
+git pull
+
+# Activate your virtual environment
+source .venv/bin/activate
+
+# Update dependencies
+uv sync
+
+# Restart the server
+voxtral-wyoming
+```
+
+**Note:** After updating, you may need to:
+- Review `.env.example` for new configuration options and update your `.env` file accordingly
+
+
 ## Troubleshooting
 
 ### voxtral-wyoming exited with code 137
