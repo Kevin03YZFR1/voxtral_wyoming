@@ -55,18 +55,35 @@ def _detect_device() -> str:
 
 @dataclass
 class VoxtralConfig:
-    model_id: str = os.getenv("MODEL_ID", "mistralai/Voxtral-Mini-3B-2507")
-    device: str = os.getenv("DEVICE", "auto")
-    dtype: Optional[str] = os.getenv("DATA_TYPE", None)  # None=auto-detect, see .env.example for trade-offs
-    locale: str = os.getenv("LANGUAGE_FALLBACK", "en-US")
-    max_new_tokens: int = int(os.getenv("MAX_NEW_TOKENS", "128"))
-    use_chat_mode: bool = os.getenv("USE_CHAT_MODE", "false").lower() in ("true", "1", "yes")
-    system_prompt: str = os.getenv(
-        "SYSTEM_PROMPT",
-        "You are a voice assistant for a smart home. Transcribe the user's voice command accurately. "
-        "Commands are typically short, imperative sentences like 'turn on the lights' or 'set temperature to 20 degrees'. "
-        "Focus on accuracy and be aware of smart home terminology."
-    )
+    model_id: str = None  # type: ignore
+    device: str = None  # type: ignore
+    dtype: Optional[str] = None
+    locale: str = None  # type: ignore
+    max_new_tokens: int = None  # type: ignore
+    use_chat_mode: bool = None  # type: ignore
+    system_prompt: str = None  # type: ignore
+
+    def __post_init__(self):
+        """Load values from environment variables if not explicitly provided."""
+        if self.model_id is None:
+            self.model_id = os.getenv("MODEL_ID", "mistralai/Voxtral-Mini-3B-2507")
+        if self.device is None:
+            self.device = os.getenv("DEVICE", "auto")
+        if self.dtype is None:
+            self.dtype = os.getenv("DATA_TYPE", None)
+        if self.locale is None:
+            self.locale = os.getenv("LANGUAGE_FALLBACK", "en-US")
+        if self.max_new_tokens is None:
+            self.max_new_tokens = int(os.getenv("MAX_NEW_TOKENS", "128"))
+        if self.use_chat_mode is None:
+            self.use_chat_mode = os.getenv("USE_CHAT_MODE", "false").lower() in ("true", "1", "yes")
+        if self.system_prompt is None:
+            self.system_prompt = os.getenv(
+                "SYSTEM_PROMPT",
+                "You are a voice assistant for a smart home. Transcribe the user's voice command accurately. "
+                "Commands are typically short, imperative sentences like 'turn on the lights' or 'set temperature to 20 degrees'. "
+                "Focus on accuracy and be aware of smart home terminology."
+            )
 
 
 def _locale_to_lang(locale: Optional[str]) -> Optional[str]:
