@@ -338,6 +338,7 @@ If Home Assistant can't connect:
 Running Voxtral is relatively hardware-intensive. It is highly recommended to use a GPU with at least 10GB VRAM for optimal performance. It also does not need to be the latest top model, though.
 
 Personally, I'm currently using a RTX 3090. Having reduced memory requirements by setting `DATA_TYPE=bf16`, most STT requests are handled in ~0.5s while using ~9GB VRAM.
+In contrast, my Apple M2 Max needs ca. 5 seconds per request (same config, similar RAM requirement).
 
 Check out the `DATA_TYPE` parameter, if you're having memory troubles.
 
