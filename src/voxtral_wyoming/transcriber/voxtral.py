@@ -17,6 +17,10 @@ from .base import ITranscriber, TranscriptionResult
 
 _logger = logging.getLogger("voxtral_wyoming.transcriber")
 
+# Languages supported by each Voxtral generation
+VOXTRAL_GEN1_LANGUAGES = ["en-US", "fr-FR", "de-DE", "es-ES", "it-IT", "pt-PT", "nl-NL", "hi-IN"]
+VOXTRAL_GEN2_LANGUAGES = VOXTRAL_GEN1_LANGUAGES + ["ar-SA", "zh-CN", "ja-JP", "ko-KR", "ru-RU"]
+
 
 def _detect_device() -> str:
     """Automatically detect the best available device for inference.
@@ -66,7 +70,7 @@ class VoxtralConfig:
     def __post_init__(self):
         """Load values from environment variables if not explicitly provided."""
         if self.model_id is None:
-            self.model_id = os.getenv("MODEL_ID", "mistralai/Voxtral-Mini-3B-2507")
+            self.model_id = os.getenv("MODEL_ID", "mistralai/Voxtral-Mini-4B-Realtime-2602")
         if self.device is None:
             self.device = os.getenv("DEVICE", "auto")
         if self.dtype is None:
@@ -181,6 +185,7 @@ class VoxtralTranscriber(ITranscriber):
         self._loaded = False
         self._processor = None
         self._model = None
+        self._is_realtime_model = False
 
         # Auto-detect device if set to 'auto'
         if self.config.device.lower() == "auto":
@@ -199,11 +204,30 @@ class VoxtralTranscriber(ITranscriber):
             return
 
         try:
-            from transformers import VoxtralForConditionalGeneration, AutoProcessor  # type: ignore
+            from transformers import AutoProcessor  # type: ignore
         except Exception as e:  # pragma: no cover - only when voxtral backend is used
             raise ImportError(
-                "transformers is required for VoxtralTranscriber. Install transformers >= 4.42."
+                "transformers is required for VoxtralTranscriber. Install transformers >= 4.57."
             ) from e
+
+        # Import model classes — the realtime class requires transformers >= 5.2
+        try:
+            from transformers import VoxtralRealtimeForConditionalGeneration  # type: ignore
+            _realtime_cls = VoxtralRealtimeForConditionalGeneration
+        except ImportError:
+            _realtime_cls = None
+
+        try:
+            from transformers import VoxtralForConditionalGeneration  # type: ignore
+            _legacy_cls = VoxtralForConditionalGeneration
+        except ImportError:
+            _legacy_cls = None
+
+        if _realtime_cls is None and _legacy_cls is None:
+            raise ImportError(
+                "No Voxtral model class found in transformers. "
+                "Install transformers >= 4.57 (gen1 models) or >= 5.2 (gen2 realtime models)."
+            )
 
         import torch  # type: ignore
         import logging
@@ -226,24 +250,44 @@ class VoxtralTranscriber(ITranscriber):
         # Load processor and model from local files/cache
         self._processor = AutoProcessor.from_pretrained(model_id, local_files_only=local_only)
 
-        # Load model with dtype parameter (None = auto-detect) and device_map to avoid slow CPU->GPU transfer
-        # Using device_map loads model directly on target device, avoiding expensive CPU->GPU memory transfer
-        try:
-            # Prepare model loading kwargs
-            model_kwargs = {
-                "local_files_only": local_only,
-                "device_map": self._device,
-            }
-            if self._dtype is not None:
-                model_kwargs["dtype"] = self._dtype
+        # Prepare model loading kwargs
+        model_kwargs = {
+            "local_files_only": local_only,
+            "device_map": self._device,
+        }
+        if self._dtype is not None:
+            model_kwargs["torch_dtype"] = self._dtype
 
-            self._model = VoxtralForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
+        # Try to load the model — prefer the realtime class (gen2), fall back to legacy (gen1).
+        # Each class is tied to a specific architecture; loading the wrong class raises an error
+        # which we use as the signal to try the other one.
+        def _load_with_fallback(primary_cls, fallback_cls, kwargs):
+            """Try primary class; if it raises (wrong architecture), try fallback."""
+            if primary_cls is not None:
+                try:
+                    model = primary_cls.from_pretrained(model_id, **kwargs)
+                    return model, primary_cls
+                except Exception as e:
+                    if fallback_cls is None:
+                        raise
+                    _logger.debug(f"Could not load with {primary_cls.__name__}: {e}. Trying fallback class.")
+            model = fallback_cls.from_pretrained(model_id, **kwargs)
+            return model, fallback_cls
+
+        try:
+            self._model, loaded_cls = _load_with_fallback(_realtime_cls, _legacy_cls, model_kwargs)
         except Exception as e:
             # Fallback to CPU if device loading fails
             _logger.warning(f"Failed to load model on {self._device}: {e}. Falling back to CPU")
             self._device = "cpu"
             model_kwargs["device_map"] = "cpu"
-            self._model = VoxtralForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
+            self._model, loaded_cls = _load_with_fallback(_realtime_cls, _legacy_cls, model_kwargs)
+
+        self._is_realtime_model = (_realtime_cls is not None and loaded_cls is _realtime_cls)
+        _logger.info(
+            f"Model loaded using {'gen2 realtime' if self._is_realtime_model else 'gen1 legacy'} class "
+            f"({loaded_cls.__name__})"
+        )
 
         # Log the actual dtype that was loaded
         if hasattr(self._model, 'dtype'):
@@ -260,6 +304,11 @@ class VoxtralTranscriber(ITranscriber):
         self._model.eval()
 
         self._loaded = True
+
+    @property
+    def supported_languages(self) -> list:
+        """Return the language list for the loaded model generation."""
+        return VOXTRAL_GEN2_LANGUAGES if self._is_realtime_model else VOXTRAL_GEN1_LANGUAGES
 
     def transcribe(self, audio_pcm: bytes, sample_rate: int, locale: Optional[str] = None) -> TranscriptionResult:
         # Lazy-load heavy deps and model
@@ -337,13 +386,18 @@ class VoxtralTranscriber(ITranscriber):
             # Pass the audio as numpy array directly (not base64) so the processor
             # can properly extract audio features using WhisperFeatureExtractor
             try:
-                model_inputs = self._processor.apply_transcription_request(
-                    language=language_only,
-                    audio=wav,
-                    model_id=self.config.model_id,
-                    sampling_rate=sample_rate,
-                    format=["wav"]  # WAV is the container format for PCM audio data
-                )
+                if self._is_realtime_model:
+                    # Gen2 realtime API: processor takes the audio array directly
+                    model_inputs = self._processor(wav, return_tensors="pt")
+                else:
+                    # Gen1 legacy API: apply_transcription_request with explicit parameters
+                    model_inputs = self._processor.apply_transcription_request(
+                        language=language_only,
+                        audio=wav,
+                        model_id=self.config.model_id,
+                        sampling_rate=sample_rate,
+                        format=["wav"],  # WAV is the container format for PCM audio data
+                    )
             except Exception as e:
                 raise RuntimeError(f"Error preparing audio for model: {e}") from e
 
@@ -351,15 +405,18 @@ class VoxtralTranscriber(ITranscriber):
             # apply_transcription_request returns a BatchEncoding object with input_ids
             input_ids_length = model_inputs.get("input_ids").shape[1] if "input_ids" in model_inputs else 0
 
-        # Move inputs to device - use .to() method if available to preserve BatchEncoding structure
+        # Move inputs to device and cast float tensors to the model's dtype
+        # to avoid "Input type (float) and bias type (c10::BFloat16) should be the same"
+        model_dtype = next(self._model.parameters()).dtype
         try:
             if hasattr(model_inputs, 'to'):
                 # BatchEncoding has a .to() method that preserves structure
-                model_inputs = model_inputs.to(self._device)
+                model_inputs = model_inputs.to(device=self._device, dtype=model_dtype)
             else:
                 # Fallback for plain dict
                 model_inputs = {
-                    k: v.to(self._device) if hasattr(v, 'to') else v
+                    k: v.to(device=self._device, dtype=model_dtype if v.is_floating_point() else None)
+                    if hasattr(v, 'to') else v
                     for k, v in model_inputs.items()
                 }
         except Exception as e:
