@@ -26,14 +26,5 @@ services:
       # Persist HuggingFace cache (optional)
       - huggingface_cache:/home/appuser/.cache/huggingface
 
-    # Uncomment for NVIDIA GPU support
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-
 volumes:
   huggingface_cache:

@@ -45,19 +45,18 @@ See the short configuration overview below or checkout the `.env.example` for de
 
 **GPU Support:**
 
-To enable NVIDIA GPU support, uncomment the `deploy` section in `docker-compose.yml`:
+To enable NVIDIA GPU support, symlink the provided override file:
 
-```yaml
-deploy:
-  resources:
-    reservations:
-      devices:
-        - driver: nvidia
-          count: 1
-          capabilities: [gpu]
+```bash
+ln -s docker-compose.gpu.yml docker-compose.override.yml
 ```
 
-Then set `DEVICE=cuda` in your `.env` file (or leave it as `DEVICE=auto` for automatic detection).
+And apply changes:
+```bash
+docker compose up -d
+```
+
+GPU mode should get enabled automatically, but you can also do so explicitly by setting `DEVICE=cuda` in your `.env` file.
 
 **Local Model Files:**
 
