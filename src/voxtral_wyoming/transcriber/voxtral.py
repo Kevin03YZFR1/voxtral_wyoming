@@ -209,20 +209,24 @@ class VoxtralTranscriber(ITranscriber):
         # Load processor and model from local files/cache
         self._processor = AutoProcessor.from_pretrained(model_id, local_files_only=local_only)
 
-        # Load model with dtype parameter (None = auto-detect)
-        if self._dtype is None:
-            # Let transformers auto-detect dtype from model files
-            self._model = VoxtralForConditionalGeneration.from_pretrained(
-                model_id,
-                local_files_only=local_only,
-            )
-        else:
-            # Use explicitly specified dtype
-            self._model = VoxtralForConditionalGeneration.from_pretrained(
-                model_id,
-                dtype=self._dtype,
-                local_files_only=local_only,
-            )
+        # Load model with dtype parameter (None = auto-detect) and device_map to avoid slow CPU->GPU transfer
+        # Using device_map loads model directly on target device, avoiding expensive CPU->GPU memory transfer
+        try:
+            # Prepare model loading kwargs
+            model_kwargs = {
+                "local_files_only": local_only,
+                "device_map": self._device,
+            }
+            if self._dtype is not None:
+                model_kwargs["dtype"] = self._dtype
+
+            self._model = VoxtralForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
+        except Exception as e:
+            # Fallback to CPU if device loading fails
+            _logger.warning(f"Failed to load model on {self._device}: {e}. Falling back to CPU")
+            self._device = "cpu"
+            model_kwargs["device_map"] = "cpu"
+            self._model = VoxtralForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
 
         # Log the actual dtype that was loaded
         if hasattr(self._model, 'dtype'):
@@ -235,15 +239,7 @@ class VoxtralTranscriber(ITranscriber):
             except:
                 _logger.info(f"Model loaded successfully (data type detection unavailable)")
 
-        # Move to device explicitly and set eval mode
-        try:
-            if self._device:
-                self._model.to(self._device)
-        except Exception:
-            # Fallback to CPU if device move fails
-            _logger.warning(f"Failed to move model to {self._device}, falling back to CPU")
-            self._device = "cpu"
-            self._model.to("cpu")
+        # Model is already on the target device via device_map, just set eval mode
         self._model.eval()
 
         self._loaded = True
