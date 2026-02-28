@@ -145,34 +145,31 @@ All configuration is done via environment variables. The easiest way is to use a
 
 ### Key Configuration Options
 
-- `HOST` (default: 0.0.0.0) - Bind host
-- `PORT` (default: 10300) - Bind port
-- `MODEL_ID` ID Voxtral model to use
-  - "mistralai/Voxtral-Mini-3B-2507" (default)
-  - or "mistralai/Voxtral-Small-24B-2507"
-  - or [other compatible variant from Hugging Face](https://huggingface.co/models?other=voxtral)
-      - [e.g. a quantized one](https://huggingface.co/models?other=base_model:quantized:mistralai/Voxtral-Mini-3B-2507)
-- `DEVICE` (default: auto) - Device selection:
-  - `auto`: Automatically detect best device (cuda for NVIDIA GPU, mps for Apple Silicon, or cpu as fallback) - RECOMMENDED
-  - `cuda`: Force NVIDIA GPU usage
-  - `mps`: Force Apple Silicon GPU usage
-  - `cpu`: Force CPU usage
-  - Note: Automatically falls back to CPU if manually specified device is unavailable
-- `DATA_TYPE` (default: auto-detect) - Data type override (optional, leave unset for auto-detection)
-  - Override to bf16 or fp16 when loading fp32 models on GPU for memory savings
-- `LOG_LEVEL` (default: INFO) - Logging level
-- `MAX_SECONDS` (default: 60) - Maximum audio duration in seconds
-- `MAX_NEW_TOKENS` (default: 128) - Maximum generation length
-- `USE_CHAT_MODE` (default: false) - Enable chat mode with system prompts instead of transcribe-only mode
-  - **false**: Optimized transcribe-only mode (faster, recommended for most users)
-  - **true**: Chat mode with system prompt support (allows domain-specific context guidance)
-- `SYSTEM_PROMPT` (default: smart home context) - System prompt for chat mode (only used when `USE_CHAT_MODE=true`). Customize to provide context about smart home commands, domain-specific vocabulary, or command structure expectations.
-- `SAVE_AUDIO` (default: false) - Save all received audio input as WAV files (one per request)
-- `AUDIO_SAVE_DIR` (default: ./output/audio/) - Directory where audio files will be saved
-- `LANGUAGE_FALLBACK` (default: en-US) - Fallback language/locale hint. Will get overridden by the configuration of your Home Assistant Voice Assistant.
-- `SAMPLE_RATE_FALLBACK` (default: 16000) - Expected audio sample rate in Hz. Again just a fallback value which will get replaced by the information which Home Assistant provides through the Wyoming protocol.
+For most users, the default configuration should work just fine.
 
-See `.env.example` for detailed documentation of all options.
+You probably want to check out at least these options, though:
+
+- **`MODEL_ID`** - Which Voxtral model to use
+  - `mistralai/Voxtral-Mini-3B-2507` (default, smaller and faster)
+  - `mistralai/Voxtral-Small-24B-2507` (larger and more accurate)
+  - Or [any compatible variant from Hugging Face](https://huggingface.co/models?other=voxtral)
+
+- **`DATA_TYPE`** - Memory/performance optimization (leave unset for auto-detection)
+  - Set to `bf16` for modern GPUs (RTX 30xx+) to reduce memory usage by ~50%
+  - Set to `fp16` for older GPUs with similar memory savings
+
+- **`DEVICE`** - Which device to run the model
+  - default auto selection should work fine, but you could override to `cpu`, `cuda` (NVIDIA GPU), `mps` (Apple Silicon)
+
+- **`USE_CHAT_MODE`** - Transcription mode (default: false)
+  - `false`: Optimized transcribe-only mode (faster, recommended for most users)
+  - `true`: Chat mode with system prompt support for domain-specific context
+
+- **`SYSTEM_PROMPT`** - Custom instructions for chat mode (only when `USE_CHAT_MODE=true`)
+  - Customize to guide transcription for smart home commands or specific vocabulary
+  - Should be in the language you expect to speak
+
+For all available configuration options, see `.env.example` with detailed documentation.
 
 ## Development
 
