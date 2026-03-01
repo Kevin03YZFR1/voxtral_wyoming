@@ -126,7 +126,9 @@ You don't need to install any HA addon, but just configure a new Wyoming integra
 
 2. Enter the server host and port as configured during your server setup and confirm
 
-Now you can choose `voxtral-wyoming` as the Speech-to-text option within any of your configured Assistants on **Settings** → **Voice assistants**.
+3. Now you can choose `voxtral-wyoming` as the Speech-to-text option within any of your configured Assistants on **Settings** → **Voice assistants**:
+
+   [![Voice Assistants](https://my.home-assistant.io/badges/voice_assistants.svg)](https://my.home-assistant.io/redirect/voice_assistants/)
 
 ## Configuration
 
