@@ -18,6 +18,11 @@ class ITranscriber(Protocol):
     Implementations should be local-only and must not use any remote APIs.
     """
 
+    @property
+    def supported_languages(self) -> list[str]:
+        """Return the list of supported language locale codes (e.g. ["en-US", "fr-FR"])."""
+        ...
+
     def transcribe(
         self,
         audio_pcm: bytes,

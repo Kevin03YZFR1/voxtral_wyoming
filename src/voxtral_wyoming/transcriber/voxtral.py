@@ -226,7 +226,7 @@ class VoxtralTranscriber(ITranscriber):
         if _realtime_cls is None and _legacy_cls is None:
             raise ImportError(
                 "No Voxtral model class found in transformers. "
-                "Install transformers >= 4.57 (gen1 models) or >= 5.2 (gen2 realtime models)."
+                "Install transformers >= 5.2."
             )
 
         import torch  # type: ignore
@@ -270,7 +270,7 @@ class VoxtralTranscriber(ITranscriber):
                 except Exception as e:
                     if fallback_cls is None:
                         raise
-                    _logger.debug(f"Could not load with {primary_cls.__name__}: {e}. Trying fallback class.")
+                    _logger.warning(f"Could not load with {primary_cls.__name__}: {e}. Trying fallback class.")
             model = fallback_cls.from_pretrained(model_id, **kwargs)
             return model, fallback_cls
 
@@ -387,8 +387,9 @@ class VoxtralTranscriber(ITranscriber):
             # can properly extract audio features using WhisperFeatureExtractor
             try:
                 if self._is_realtime_model:
-                    # Gen2 realtime API: processor takes the audio array directly
-                    model_inputs = self._processor(wav, return_tensors="pt")
+                    # Gen2 realtime API: processor takes the audio array directly.
+                    # Language is auto-detected by the model; the processor has no language parameter.
+                    model_inputs = self._processor(wav, sampling_rate=sample_rate, return_tensors="pt")
                 else:
                     # Gen1 legacy API: apply_transcription_request with explicit parameters
                     model_inputs = self._processor.apply_transcription_request(
@@ -405,23 +406,16 @@ class VoxtralTranscriber(ITranscriber):
             # apply_transcription_request returns a BatchEncoding object with input_ids
             input_ids_length = model_inputs.get("input_ids").shape[1] if "input_ids" in model_inputs else 0
 
-        # Move inputs to device and cast float tensors to the model's dtype
-        # to avoid "Input type (float) and bias type (c10::BFloat16) should be the same"
+        # Move inputs to device and cast only floating-point tensors to the model's dtype
+        # to avoid "Input type (float) and bias type (c10::BFloat16) should be the same".
+        # We iterate explicitly because BatchEncoding.to(dtype=...) would also cast
+        # integer tensors (input_ids, attention_mask), corrupting them.
         model_dtype = next(self._model.parameters()).dtype
-        try:
-            if hasattr(model_inputs, 'to'):
-                # BatchEncoding has a .to() method that preserves structure
-                model_inputs = model_inputs.to(device=self._device, dtype=model_dtype)
-            else:
-                # Fallback for plain dict
-                model_inputs = {
-                    k: v.to(device=self._device, dtype=model_dtype if v.is_floating_point() else None)
-                    if hasattr(v, 'to') else v
-                    for k, v in model_inputs.items()
-                }
-        except Exception as e:
-            _logger.warning(f"Could not move inputs to device {self._device}: {e}")
-            pass  # Fallback: use inputs as-is if device move fails
+        model_inputs = {
+            k: v.to(device=self._device, dtype=model_dtype if v.is_floating_point() else None)
+            if hasattr(v, 'to') else v
+            for k, v in model_inputs.items()
+        }
 
         # Generate with CPU-friendly, deterministic settings
         gen_kwargs = {

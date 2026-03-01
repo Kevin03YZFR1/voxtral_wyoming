@@ -13,8 +13,6 @@ from .transcriber.voxtral import VoxtralTranscriber, VoxtralConfig
 from .transcriber.base import ITranscriber
 from .audio import AudioSpec, clamp_audio_size, save_audio_as_wav
 
-from .transcriber.voxtral import VOXTRAL_GEN1_LANGUAGES
-
 _LOGGER = logging.getLogger("voxtral_wyoming")
 
 
@@ -75,7 +73,7 @@ async def _wyoming_handle_client(
                     installed=True,
                     description="Offline STT with Mistral Voxtral",
                     version=VW_VERSION,
-                    languages=getattr(transcriber, 'supported_languages', VOXTRAL_GEN1_LANGUAGES),
+                    languages=transcriber.supported_languages,
                 )
                 asr_program = AsrProgram(
                     name="voxtral-wyoming",
