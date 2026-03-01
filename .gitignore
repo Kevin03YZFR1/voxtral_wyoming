@@ -33,3 +33,6 @@ docker-compose.override.yml
 !/output/audio/
 /output/audio/*
 !/output/audio/.gitkeep
+
+# Local test files
+/test-audio/*
