@@ -63,7 +63,7 @@ class VoxtralConfig:
     device: str = None  # type: ignore
     dtype: Optional[str] = None
     locale: str = None  # type: ignore
-    max_new_tokens: int = None  # type: ignore
+    max_seconds: float = None  # type: ignore
     use_chat_mode: bool = None  # type: ignore
     system_prompt: str = None  # type: ignore
 
@@ -77,8 +77,8 @@ class VoxtralConfig:
             self.dtype = os.getenv("DATA_TYPE", None)
         if self.locale is None:
             self.locale = os.getenv("LANGUAGE_FALLBACK", "en-US")
-        if self.max_new_tokens is None:
-            self.max_new_tokens = int(os.getenv("MAX_NEW_TOKENS", "128"))
+        if self.max_seconds is None:
+            self.max_seconds = float(os.getenv("MAX_SECONDS", "60"))
         if self.use_chat_mode is None:
             self.use_chat_mode = os.getenv("USE_CHAT_MODE", "false").lower() in ("true", "1", "yes")
         if self.system_prompt is None:
@@ -338,6 +338,14 @@ class VoxtralTranscriber(ITranscriber):
         # Prepare audio as float32 numpy array in [-1, 1]
         wav = _pcm16_le_bytes_to_float32(audio_pcm)
 
+        # Resample if the incoming audio rate doesn't match the processor's expected rate
+        target_sr = self._processor.feature_extractor.sampling_rate
+        if sample_rate != target_sr:
+            import soxr
+            _logger.info(f"Resampling audio from {sample_rate}Hz to {target_sr}Hz")
+            wav = soxr.resample(wav, sample_rate, target_sr)
+            sample_rate = target_sr
+
         # Log transcription start with key parameters
         mode_str = "chat mode" if self.config.use_chat_mode else "transcribe-only mode"
         _logger.info(
@@ -406,23 +414,19 @@ class VoxtralTranscriber(ITranscriber):
             # apply_transcription_request returns a BatchEncoding object with input_ids
             input_ids_length = model_inputs.get("input_ids").shape[1] if "input_ids" in model_inputs else 0
 
-        # Move inputs to device and cast only floating-point tensors to the model's dtype
-        # to avoid "Input type (float) and bias type (c10::BFloat16) should be the same".
-        # We iterate explicitly because BatchEncoding.to(dtype=...) would also cast
-        # integer tensors (input_ids, attention_mask), corrupting them.
-        model_dtype = next(self._model.parameters()).dtype
-        model_inputs = {
-            k: v.to(device=self._device, dtype=model_dtype if v.is_floating_point() else None)
-            if hasattr(v, 'to') else v
-            for k, v in model_inputs.items()
-        }
+        # Move inputs to the model's device and dtype.
+        # BatchFeature.to() in transformers >= 5.2 handles integer tensors correctly.
+        model_inputs = model_inputs.to(self._model.device, dtype=self._model.dtype)
 
-        # Generate with CPU-friendly, deterministic settings
-        gen_kwargs = {
-            "max_new_tokens": self.config.max_new_tokens,
-            "do_sample": False,
-            "num_beams": 1,
-        }
+        # Generation settings — always use temperature=0.0 per model card recommendation.
+        # Gen2 realtime transcribe-only: the model auto-determines output length from audio,
+        # so we don't pass max_new_tokens.  Gen1 and chat mode: derive from max_seconds
+        # using the 80ms/token formula (e.g. 60s → 750 tokens).
+        gen_kwargs = {"temperature": 0.0}
+        if not (self._is_realtime_model and not self.config.use_chat_mode):
+            gen_kwargs["max_new_tokens"] = int(self.config.max_seconds / 0.08)
+            gen_kwargs["do_sample"] = False
+            gen_kwargs["num_beams"] = 1
 
         # Time the model inference
         inference_start = time.perf_counter()
@@ -434,19 +438,17 @@ class VoxtralTranscriber(ITranscriber):
         inference_time = time.perf_counter() - inference_start
         _logger.debug(f"Model inference completed in {inference_time:.2f}s")
 
-        # Decode the outputs
-        # For apply_transcription_request, we need to skip the prompt tokens
-        # The HuggingFace example shows: outputs[:, inputs.input_ids.shape[1]:]
+        # Decode the outputs.
+        # Gen2 realtime transcribe-only: decode full output (official API pattern).
+        # Gen1 / chat mode: slice off prompt tokens first.
         try:
-            # Decode with proper slicing to remove prompt tokens
-            if input_ids_length > 0:
-                # Slice to get only generated tokens (excluding prompt)
-                generated_tokens = outputs[:, input_ids_length:]
+            if self._is_realtime_model and not self.config.use_chat_mode:
+                decoded = self._processor.batch_decode(outputs, skip_special_tokens=True)
+            elif input_ids_length > 0:
                 decoded = self._processor.batch_decode(
-                    generated_tokens, skip_special_tokens=True
+                    outputs[:, input_ids_length:], skip_special_tokens=True
                 )
             else:
-                # No input_ids or length is 0, decode full output
                 decoded = self._processor.batch_decode(outputs, skip_special_tokens=True)
         except Exception as e:
             _logger.error(f"Error decoding tokens: {e}", exc_info=True)
