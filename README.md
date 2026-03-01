@@ -210,9 +210,12 @@ python examples/client_sample.py
 # Or specify a custom environment file
 python examples/client_sample.py /path/to/custom.env
 
-# Or use environment variables directly
-HOST=127.0.0.1 PORT=10300 SAMPLE_URL=https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3 python examples/client_sample.py
+# Or override SAMPLE_FILE directly (local path or remote URL)
+SAMPLE_FILE=test-audio/my_recording.wav python examples/client_sample.py
+SAMPLE_FILE=https://example.com/audio.mp3 python examples/client_sample.py
 ```
+
+`SAMPLE_FILE` accepts both local file paths (absolute or relative) and remote URLs (http/https). When not set, it defaults to a public sample hosted on Hugging Face.
 
 The sample client will automatically attempt to convert audio to PCM16 mono using ffmpeg if available and enabled. Note: The server expects PCM16 mono audio at 16kHz as per the Wyoming protocol standard.
 
