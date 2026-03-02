@@ -418,14 +418,16 @@ class VoxtralTranscriber(ITranscriber):
         # BatchFeature.to() in transformers >= 5.2 handles integer tensors correctly.
         model_inputs = model_inputs.to(self._model.device, dtype=self._model.dtype)
 
-        # Generation settings — always use temperature=0.0 per model card recommendation.
+        # Generation settings — greedy decoding per model card (temperature=0).
+        # We use do_sample=False instead of passing temperature=0.0, because
+        # HuggingFace generate() does not accept temperature as a valid kwarg
+        # when sampling is disabled.
         # Gen2 realtime transcribe-only: the model auto-determines output length from audio,
         # so we don't pass max_new_tokens.  Gen1 and chat mode: derive from max_seconds
         # using the 80ms/token formula (e.g. 60s → 750 tokens).
-        gen_kwargs = {"temperature": 0.0}
+        gen_kwargs: dict = {"do_sample": False}
         if not (self._is_realtime_model and not self.config.use_chat_mode):
             gen_kwargs["max_new_tokens"] = int(self.config.max_seconds / 0.08)
-            gen_kwargs["do_sample"] = False
             gen_kwargs["num_beams"] = 1
 
         # Time the model inference
