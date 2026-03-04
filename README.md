@@ -6,6 +6,7 @@ The goal is to provide a powerful drop-in alternative to the popular Whisper STT
 
 ## Features
 
+- 🔄 **Gen1 & Gen2 Models**: Supports both original Voxtral and newer Voxtral Realtime models — auto-detected at startup, just set the `MODEL_ID`
 - 🎯 **Offline-only**: Local inference with Mistral's Voxtral model files (no cloud APIs)
 - 🔌 **Wyoming Protocol**: Full compatibility with Home Assistant Assist
 - 🐳 **Docker Ready**: Containerized deployment with non-root user
@@ -67,7 +68,7 @@ volumes:
   - ./models:/models:ro
 ```
 
-Then set `MODEL_ID=/models/Voxtral-Mini-3B-2507` in your `.env` file.
+Then set `MODEL_ID=/models/<model_name>` in your `.env` file (e.g. `MODEL_ID=/models/Voxtral-Mini-4B-Realtime-2602`).
 
 **Audio Saving:**
 
@@ -102,14 +103,14 @@ docker run --rm -it -p 10300:10300 voxtral-wyoming:latest
 docker run --rm -it \
   -p 10300:10300 \
   -v /path/to/voxtral/models:/models:ro \
-  -e MODEL_ID=/models/Voxtral-Mini-3B-2507 \
+  -e MODEL_ID=/models/Voxtral-Mini-4B-Realtime-2602 \
   voxtral-wyoming:latest
 
 # With GPU support (NVIDIA)
 docker run --rm -it --gpus all \
   -p 10300:10300 \
   -v /path/to/voxtral/models:/models:ro \
-  -e MODEL_ID=/models/Voxtral-Mini-3B-2507 \
+  -e MODEL_ID=/models/Voxtral-Mini-4B-Realtime-2602 \
   -e DEVICE=cuda \
   voxtral-wyoming:latest
 ```
@@ -151,15 +152,16 @@ For most users, the default configuration should work just fine.
 You probably want to check out at least these options, though:
 
 - **`MODEL_ID`** - Which Voxtral model to use
-  - `mistralai/Voxtral-Mini-3B-2507` (default, smaller and faster)
-  - `mistralai/Voxtral-Small-24B-2507` (larger and more accurate)
+  - **Gen2 (recommended):** `mistralai/Voxtral-Mini-4B-Realtime-2602` (13 languages, improved accuracy)
+  - **Gen1:** `mistralai/Voxtral-Mini-3B-2507` (8 languages, smaller/faster)
+  - **Gen1:** `mistralai/Voxtral-Small-24B-2507` (8 languages, larger/more accurate)
   - Or [any compatible variant from Hugging Face](https://huggingface.co/models?other=voxtral)
 
 - **`DATA_TYPE`** - Memory/performance optimization (leave unset for auto-detection)
   - Set to `bf16` for modern GPUs (RTX 30xx+) to reduce memory usage by ~50%
   - Set to `fp16` for older GPUs with similar memory savings
 
-- **`TRANSCRIPTION_DELAY_MS`** - Latency/accuracy trade-off for Gen2 realtime models (default: 480ms)
+- **`TRANSCRIPTION_DELAY_MS`** - Latency/accuracy trade-off (Gen2 only, ignored for Gen1; default: 480ms)
     - Lower values (e.g. `80`) are faster but less accurate; higher values (e.g. `2400`) improve accuracy at the cost of latency
 
 - **`DEVICE`** - Which device to run the model
@@ -287,7 +289,7 @@ change settings on your local setup.
 
 If you see "model not found" errors:
 1. Ensure `MODEL_ID` points to a valid model id from Hugging Face
-2. Or ensure the model is in your HuggingFace cache (run `huggingface-cli download mistralai/Voxtral-Mini-3B-2507`)
+2. Or ensure the model is in your HuggingFace cache (run `huggingface-cli download mistralai/Voxtral-Mini-4B-Realtime-2602`)
 
 
 ### GPU Not Working
@@ -341,12 +343,12 @@ If Home Assistant can't connect:
 ## Hardware & Performance
 Running Voxtral is relatively hardware-intensive. It is highly recommended to use a GPU with at least 10GB VRAM for optimal performance. It also does not need to be the latest top model, though.
 
-Personally, I'm currently using a RTX 3090. Having reduced memory requirements by setting `DATA_TYPE=bf16`, most STT requests are handled in ~0.5s while using ~9GB VRAM.
+Personally, I'm currently using a RTX 3090. Having reduced memory requirements by setting `DATA_TYPE=bf16`, most gen1 (`MODEL_ID=/models/Voxtral-Mini-3B-2507`) STT requests are handled in ~0.5s while using ~9GB VRAM.
 In contrast, my Apple M2 Max needs ca. 5 seconds per request (same config, similar RAM requirement).
 
 Check out the `DATA_TYPE` parameter, if you're having memory troubles.
 
-I can't really recommend running the model on CPU only. Anyway, if you want to give it a shot, I suggest using [one of the quantized models](https://huggingface.co/models?other=base_model:quantized:mistralai/Voxtral-Mini-3B-2507) for the `MODEL_ID` option to further reduce required resources.
+I can't really recommend running the model on CPU only. Anyway, if you want to give it a shot, I suggest using one of the _quantized_ models ([gen1](https://huggingface.co/models?other=base_model:quantized:mistralai/Voxtral-Mini-3B-2507) or [gen2](https://huggingface.co/models?other=base_model:quantized:mistralai/Voxtral-Mini-4B-Realtime-2602)) for the `MODEL_ID` option to further reduce required resources.
 
 
 ## Online Alternative
