@@ -36,3 +36,4 @@ docker-compose.override.yml
 
 # Local test files
 /test-audio/*
+/test-local.sh
