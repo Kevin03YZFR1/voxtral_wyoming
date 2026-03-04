@@ -66,6 +66,7 @@ class VoxtralConfig:
     max_seconds: float = None  # type: ignore
     use_chat_mode: bool = None  # type: ignore
     system_prompt: str = None  # type: ignore
+    transcription_delay_ms: Optional[int] = None
 
     def __post_init__(self):
         """Load values from environment variables if not explicitly provided."""
@@ -88,6 +89,42 @@ class VoxtralConfig:
                 "Commands are typically short, imperative sentences like 'turn on the lights' or 'set temperature to 20 degrees'. "
                 "Focus on accuracy and be aware of smart home terminology."
             )
+        if self.transcription_delay_ms is None:
+            env_val = os.getenv("TRANSCRIPTION_DELAY_MS", None)
+            if env_val is not None:
+                self.transcription_delay_ms = int(env_val)
+        _validate_transcription_delay_ms(self.transcription_delay_ms)
+
+
+# Valid transcription_delay_ms values: multiples of 80 from 80–1200, plus 2400
+_VALID_DELAY_VALUES = set(range(80, 1201, 80)) | {2400}
+
+
+def _validate_transcription_delay_ms(value: Optional[int]) -> Optional[int]:
+    """Validate transcription_delay_ms value.
+
+    Valid values: multiples of 80 from 80 to 1200, or exactly 2400.
+    Returns None if input is None (meaning 'use model default').
+    """
+    if value is None:
+        return None
+    if value not in _VALID_DELAY_VALUES:
+        raise ValueError(
+            f"Invalid TRANSCRIPTION_DELAY_MS={value}. "
+            f"Must be a multiple of 80 between 80 and 1200, or exactly 2400. "
+            f"Recommended value: 480 (best balance of latency and accuracy)."
+        )
+    return value
+
+
+def _delay_ms_to_tokens(delay_ms: int) -> int:
+    """Convert transcription_delay_ms to num_delay_tokens.
+
+    For Voxtral Realtime models with default audio parameters
+    (sampling_rate=16000, hop_length=160, audio_length_per_tok=8),
+    each token corresponds to 80ms of audio.
+    """
+    return delay_ms // 80
 
 
 def _locale_to_lang(locale: Optional[str]) -> Optional[str]:
@@ -302,6 +339,24 @@ class VoxtralTranscriber(ITranscriber):
 
         # Model is already on the target device via device_map, just set eval mode
         self._model.eval()
+
+        # Apply transcription_delay_ms for Gen2 realtime models.
+        # Must be set on the processor's audio config BEFORE processing audio,
+        # so that both the audio padding and num_delay_tokens are consistent.
+        if self._is_realtime_model and self.config.transcription_delay_ms is not None:
+            delay_ms = self.config.transcription_delay_ms
+            self._processor.mistral_common_audio_config.transcription_delay_ms = float(delay_ms)
+            num_tokens = _delay_ms_to_tokens(delay_ms)
+            self._model.config.default_num_delay_tokens = num_tokens
+            _logger.info(f"Transcription delay set to {delay_ms}ms ({num_tokens} delay tokens)")
+        elif self._is_realtime_model:
+            default_tokens = getattr(self._model.config, "default_num_delay_tokens", "unknown")
+            _logger.info(f"Using model's default transcription delay ({default_tokens} delay tokens)")
+        elif self.config.transcription_delay_ms is not None:
+            _logger.warning(
+                f"TRANSCRIPTION_DELAY_MS={self.config.transcription_delay_ms} is only supported "
+                f"for Gen2 realtime models. Ignoring for Gen1 model."
+            )
 
         self._loaded = True
 

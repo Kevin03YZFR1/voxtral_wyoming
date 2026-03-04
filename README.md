@@ -159,6 +159,9 @@ You probably want to check out at least these options, though:
   - Set to `bf16` for modern GPUs (RTX 30xx+) to reduce memory usage by ~50%
   - Set to `fp16` for older GPUs with similar memory savings
 
+- **`TRANSCRIPTION_DELAY_MS`** - Latency/accuracy trade-off for Gen2 realtime models (default: 480ms)
+    - Lower values (e.g. `80`) are faster but less accurate; higher values (e.g. `2400`) improve accuracy at the cost of latency
+
 - **`DEVICE`** - Which device to run the model
   - default auto selection should work fine, but you could override to `cpu`, `cuda` (NVIDIA GPU), `mps` (Apple Silicon)
 
