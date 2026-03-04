@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pycountry import languages
-
 """Voxtral-backed transcriber implementation using Mistral's Voxtral model.
 
 Offline-only execution that loads local model files (no network calls).
@@ -79,7 +77,7 @@ class VoxtralConfig:
         if self.locale is None:
             self.locale = os.getenv("LANGUAGE_FALLBACK", "en-US")
         if self.max_seconds is None:
-            self.max_seconds = float(os.getenv("MAX_SECONDS", "60"))
+            self.max_seconds = float(os.getenv("MAX_SECONDS", "30"))
         if self.use_chat_mode is None:
             self.use_chat_mode = os.getenv("USE_CHAT_MODE", "false").lower() in ("true", "1", "yes")
         if self.system_prompt is None:
@@ -166,8 +164,6 @@ def _map_dtype(dtype_str: Optional[str]):
     if norm in ("fp8", "float8"):
         return torch.float8_e4m3fn  # FP8 E4M3 format (most common)
 
-    import logging
-    _logger = logging.getLogger("voxtral_wyoming.transcriber")
     _logger.warning(f"Unknown dtype: {dtype_str}. Using auto-detection instead")
 
     return None
@@ -244,13 +240,10 @@ class VoxtralTranscriber(ITranscriber):
             from transformers import AutoConfig, AutoProcessor  # type: ignore
         except Exception as e:  # pragma: no cover - only when voxtral backend is used
             raise ImportError(
-                "transformers is required for VoxtralTranscriber. Install transformers >= 4.57."
+                "transformers is required for VoxtralTranscriber. Install transformers >= 5.2."
             ) from e
 
         import torch  # type: ignore
-        import logging
-
-        _logger = logging.getLogger("voxtral_wyoming.transcriber")
 
         model_id = self.config.model_id
         local_only = False
@@ -347,7 +340,7 @@ class VoxtralTranscriber(ITranscriber):
         self._loaded = True
 
     @property
-    def supported_languages(self) -> list:
+    def supported_languages(self) -> list[str]:
         """Return the language list for the loaded model generation."""
         return VOXTRAL_GEN2_LANGUAGES if self._is_realtime_model else VOXTRAL_GEN1_LANGUAGES
 
@@ -356,9 +349,6 @@ class VoxtralTranscriber(ITranscriber):
         self._ensure_loaded()
 
         import torch  # type: ignore
-        import logging
-
-        _logger = logging.getLogger("voxtral_wyoming.transcriber")
 
         # Start timing for overall transcription
         start_time = time.perf_counter()
@@ -507,7 +497,11 @@ class VoxtralTranscriber(ITranscriber):
                 text = text[1:-1].strip()
 
         _logger.info(f"Final transcription text (length={len(text)} chars): {text[:100]}{'...' if len(text) > 100 else ''}")
-        duration = len(audio_pcm) / float(2 * max(1, sample_rate)) if audio_pcm else 0.0
+        # Compute duration from original PCM bytes at the original incoming rate.
+        # After resampling, sample_rate has been reassigned to the target rate,
+        # but audio_pcm still contains bytes at the original rate. Use len(wav)
+        # (float32 samples, already resampled) with the current sample_rate instead.
+        duration = len(wav) / float(max(1, sample_rate)) if audio_pcm else 0.0
 
         # Log total transcription time
         total_time = time.perf_counter() - start_time

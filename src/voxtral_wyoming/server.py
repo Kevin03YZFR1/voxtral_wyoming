@@ -246,7 +246,7 @@ def cli() -> None:
     port = int(os.getenv("PORT", "10300"))
     language = os.getenv("LANGUAGE_FALLBACK", "en-US")
     sample_rate = int(os.getenv("SAMPLE_RATE_FALLBACK", "16000"))
-    max_seconds = int(os.getenv("MAX_SECONDS", "60"))
+    max_seconds = int(os.getenv("MAX_SECONDS", "30"))
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
     save_audio = os.getenv("SAVE_AUDIO", "false").lower() in ("true", "1", "yes")
     audio_save_dir = os.getenv("AUDIO_SAVE_DIR", "/output/audio")
