@@ -241,30 +241,11 @@ class VoxtralTranscriber(ITranscriber):
             return
 
         try:
-            from transformers import AutoProcessor  # type: ignore
+            from transformers import AutoConfig, AutoProcessor  # type: ignore
         except Exception as e:  # pragma: no cover - only when voxtral backend is used
             raise ImportError(
                 "transformers is required for VoxtralTranscriber. Install transformers >= 4.57."
             ) from e
-
-        # Import model classes — the realtime class requires transformers >= 5.2
-        try:
-            from transformers import VoxtralRealtimeForConditionalGeneration  # type: ignore
-            _realtime_cls = VoxtralRealtimeForConditionalGeneration
-        except ImportError:
-            _realtime_cls = None
-
-        try:
-            from transformers import VoxtralForConditionalGeneration  # type: ignore
-            _legacy_cls = VoxtralForConditionalGeneration
-        except ImportError:
-            _legacy_cls = None
-
-        if _realtime_cls is None and _legacy_cls is None:
-            raise ImportError(
-                "No Voxtral model class found in transformers. "
-                "Install transformers >= 5.2."
-            )
 
         import torch  # type: ignore
         import logging
@@ -284,10 +265,36 @@ class VoxtralTranscriber(ITranscriber):
             dtype_display = str(self._dtype) if hasattr(self._dtype, '__name__') else self._dtype
             _logger.info(f"Loading model {model_id} with manually specified data type: {dtype_display}")
 
-        # Load processor and model from local files/cache
+        # Detect gen1 vs gen2 from model config metadata.
+        # Gen2 (realtime) models have model_type="voxtral_realtime",
+        # Gen1 (legacy) models have model_type="voxtral".
+        model_config = AutoConfig.from_pretrained(model_id, local_files_only=local_only)
+        self._is_realtime_model = model_config.model_type == "voxtral_realtime"
+        _logger.info(f"Detected {'gen2 realtime' if self._is_realtime_model else 'gen1 legacy'} model (model_type={model_config.model_type!r})")
+
+        # Import the correct model class based on detected generation
+        if self._is_realtime_model:
+            try:
+                from transformers import VoxtralRealtimeForConditionalGeneration  # type: ignore
+                _model_cls = VoxtralRealtimeForConditionalGeneration
+            except ImportError:
+                raise ImportError(
+                    f"Model {model_id} is a gen2 realtime model but VoxtralRealtimeForConditionalGeneration "
+                    f"is not available. Install transformers >= 5.2."
+                )
+        else:
+            try:
+                from transformers import VoxtralForConditionalGeneration  # type: ignore
+                _model_cls = VoxtralForConditionalGeneration
+            except ImportError:
+                raise ImportError(
+                    f"Model {model_id} is a gen1 model but VoxtralForConditionalGeneration "
+                    f"is not available. Install transformers >= 4.57."
+                )
+
+        # Load processor and model
         self._processor = AutoProcessor.from_pretrained(model_id, local_files_only=local_only)
 
-        # Prepare model loading kwargs
         model_kwargs = {
             "local_files_only": local_only,
             "device_map": self._device,
@@ -295,36 +302,15 @@ class VoxtralTranscriber(ITranscriber):
         if self._dtype is not None:
             model_kwargs["torch_dtype"] = self._dtype
 
-        # Try to load the model — prefer the realtime class (gen2), fall back to legacy (gen1).
-        # Each class is tied to a specific architecture; loading the wrong class raises an error
-        # which we use as the signal to try the other one.
-        def _load_with_fallback(primary_cls, fallback_cls, kwargs):
-            """Try primary class; if it raises (wrong architecture), try fallback."""
-            if primary_cls is not None:
-                try:
-                    model = primary_cls.from_pretrained(model_id, **kwargs)
-                    return model, primary_cls
-                except Exception as e:
-                    if fallback_cls is None:
-                        raise
-                    _logger.warning(f"Could not load with {primary_cls.__name__}: {e}. Trying fallback class.")
-            model = fallback_cls.from_pretrained(model_id, **kwargs)
-            return model, fallback_cls
-
         try:
-            self._model, loaded_cls = _load_with_fallback(_realtime_cls, _legacy_cls, model_kwargs)
+            self._model = _model_cls.from_pretrained(model_id, **model_kwargs)
         except Exception as e:
-            # Fallback to CPU if device loading fails
             _logger.warning(f"Failed to load model on {self._device}: {e}. Falling back to CPU")
             self._device = "cpu"
             model_kwargs["device_map"] = "cpu"
-            self._model, loaded_cls = _load_with_fallback(_realtime_cls, _legacy_cls, model_kwargs)
+            self._model = _model_cls.from_pretrained(model_id, **model_kwargs)
 
-        self._is_realtime_model = (_realtime_cls is not None and loaded_cls is _realtime_cls)
-        _logger.info(
-            f"Model loaded using {'gen2 realtime' if self._is_realtime_model else 'gen1 legacy'} class "
-            f"({loaded_cls.__name__})"
-        )
+        _logger.info(f"Model loaded using {_model_cls.__name__}")
 
         # Log the actual dtype that was loaded
         if hasattr(self._model, 'dtype'):
