@@ -246,7 +246,7 @@ class VoxtralTranscriber(ITranscriber):
         import torch  # type: ignore
 
         model_id = self.config.model_id
-        local_only = False
+        local_only = os.path.isabs(model_id)
 
         # Resolve dtype - None means auto-detect from model
         self._dtype = _map_dtype(self.config.dtype)
@@ -313,7 +313,7 @@ class VoxtralTranscriber(ITranscriber):
             try:
                 first_param_dtype = next(self._model.parameters()).dtype
                 _logger.info(f"Model loaded successfully with data type: {first_param_dtype}")
-            except:
+            except Exception:
                 _logger.info(f"Model loaded successfully (data type detection unavailable)")
 
         # Model is already on the target device via device_map, just set eval mode
@@ -467,8 +467,9 @@ class VoxtralTranscriber(ITranscriber):
         # Gen2 realtime transcribe-only: the model auto-determines output length from audio,
         # so we don't pass max_new_tokens.  Gen1 and chat mode: derive from max_seconds
         # using the 80ms/token formula (e.g. 60s → 750 tokens).
+        gen2_transcribe_only = self._is_realtime_model and not self.config.use_chat_mode
         gen_kwargs: dict = {"do_sample": False}
-        if not (self._is_realtime_model and not self.config.use_chat_mode):
+        if not gen2_transcribe_only:
             gen_kwargs["max_new_tokens"] = int(self.config.max_seconds / 0.08)
             gen_kwargs["num_beams"] = 1
 
@@ -486,7 +487,7 @@ class VoxtralTranscriber(ITranscriber):
         # Gen2 realtime transcribe-only: decode full output (official API pattern).
         # Gen1 / chat mode: slice off prompt tokens first.
         try:
-            if self._is_realtime_model and not self.config.use_chat_mode:
+            if gen2_transcribe_only:
                 decoded = self._processor.batch_decode(outputs, skip_special_tokens=True)
             elif input_ids_length > 0:
                 decoded = self._processor.batch_decode(
