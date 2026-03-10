@@ -337,6 +337,13 @@ class VoxtralTranscriber(ITranscriber):
                 f"for Gen2 realtime models. Ignoring for Gen1 model."
             )
 
+        if self._is_realtime_model and self.config.use_chat_mode:
+            raise ValueError(
+                "USE_CHAT_MODE=true is not supported for Gen2 realtime models. "
+                "The Gen2 processor does not have a chat template. "
+                "Disable chat mode or switch to a Gen1 model."
+            )
+
         self._loaded = True
 
     @property

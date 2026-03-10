@@ -11,7 +11,7 @@ The goal is to provide a powerful drop-in alternative to the popular Whisper STT
 - 🔌 **Wyoming Protocol**: Full compatibility with Home Assistant Assist
 - 🐳 **Docker Ready**: Containerized deployment with non-root user
 - ⚡ **Device Flexibility**: CPU, CUDA (NVIDIA), or MPS (Apple Silicon) support
-- 💬 **Dual Mode Support**: Choose between optimized transcribe-only mode or chat mode with custom system prompts for domain-specific context
+- 💬 **Chat Mode** (Gen1 only): Optional chat mode with custom system prompts for domain-specific context
 
 ## TLDR
 
@@ -169,9 +169,9 @@ You probably want to check out at least these options, though:
 
 - **`USE_CHAT_MODE`** - Transcription mode (default: false)
   - `false`: Optimized transcribe-only mode (faster, recommended for most users)
-  - `true`: Chat mode with system prompt support for domain-specific context
+  - `true`: Chat mode with system prompt support for domain-specific context (Gen1 only)
 
-- **`SYSTEM_PROMPT`** - Custom instructions for chat mode (only when `USE_CHAT_MODE=true`)
+- **`SYSTEM_PROMPT`** - Custom instructions for chat mode (Gen1 only, requires `USE_CHAT_MODE=true`)
   - Customize to guide transcription for smart home commands or specific vocabulary
   - Should be in the language you expect to speak
 
