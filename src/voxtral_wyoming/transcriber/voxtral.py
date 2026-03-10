@@ -132,80 +132,6 @@ def _locale_to_lang(locale: Optional[str]) -> Optional[str]:
     return locale.split("-")[0].split("_")[0]
 
 
-def _patch_realtime_processor_language_support(processor):
-    """Patch a VoxtralRealtimeProcessor to support per-call language hints.
-
-    The upstream VoxtralRealtimeProcessor.__call__() hardcodes language=None in the
-    TranscriptionRequest it builds.  This patches the instance so that callers can set
-    ``processor._language_hint = "en"`` (ISO-639-1) before each __call__ and have it
-    forwarded to the TranscriptionRequest for improved language adherence.
-
-    When ``_language_hint`` is None (the default), behaviour is identical to upstream.
-    """
-    import types
-    import functools
-    from transformers.models.voxtral_realtime.processing_voxtral_realtime import (
-        VoxtralRealtimeProcessorKwargs,
-    )
-    from transformers.feature_extraction_utils import BatchFeature
-    from transformers.audio_utils import make_list_of_audio
-
-    from mistral_common.audio import Audio
-    from mistral_common.protocol.instruct.chunk import RawAudio
-    from mistral_common.protocol.transcription.request import StreamingMode, TranscriptionRequest
-
-    original_call = processor.__class__.__call__
-
-    @functools.wraps(original_call)
-    def _call_with_language(self, audio=None, is_streaming=False, is_first_audio_chunk=True, **kwargs):
-        output_kwargs = self._merge_kwargs(VoxtralRealtimeProcessorKwargs, **kwargs)
-
-        if not is_streaming and not is_first_audio_chunk:
-            raise ValueError("In non-streaming mode (`is_streaming=False`), `is_first_audio_chunk` must be `True`.")
-
-        lang = getattr(self, "_language_hint", None)
-
-        audio = make_list_of_audio(audio)
-        input_ids, texts, audio_arrays = [], [], []
-        if is_first_audio_chunk:
-            for audio_el in audio:
-                audio_obj = Audio(
-                    audio_array=audio_el,
-                    sampling_rate=output_kwargs["audio_kwargs"]["sampling_rate"],
-                    format="wav",
-                )
-                transcription_request = TranscriptionRequest(
-                    audio=RawAudio.from_audio(audio_obj),
-                    streaming=StreamingMode.ONLINE if is_streaming else StreamingMode.OFFLINE,
-                    language=lang,
-                )
-                tokenized = self.tokenizer.tokenizer.encode_transcription(transcription_request)
-
-                input_ids.append(tokenized.tokens)
-                texts.append(tokenized.text)
-                audio_arrays.extend([el.audio_array for el in tokenized.audios])
-
-            text_encoding = self.tokenizer(input_ids, **output_kwargs["text_kwargs"])
-        else:
-            audio_arrays = audio
-            text_encoding = {}
-
-        audio_encoding = self.feature_extractor(
-            audio_arrays,
-            center=is_first_audio_chunk,
-            **output_kwargs["audio_kwargs"],
-        )
-
-        encoding = {**text_encoding, **audio_encoding, "num_delay_tokens": self.num_delay_tokens}
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return BatchFeature(data=encoding, tensor_type=return_tensors)
-
-    processor._language_hint = None
-    processor.__call__ = types.MethodType(_call_with_language, processor)
-    _logger.info("Patched VoxtralRealtimeProcessor to support per-call language hints")
-
-
 def _map_dtype(dtype_str: Optional[str]):
     """Map dtype string to torch dtype or return None for auto-detection.
 
@@ -362,11 +288,6 @@ class VoxtralTranscriber(ITranscriber):
         # Load processor and model
         self._processor = AutoProcessor.from_pretrained(model_id, local_files_only=local_only)
 
-        # Patch gen2 realtime processor to support per-call language hints.
-        # The upstream __call__ hardcodes language=None; our patch reads _language_hint.
-        if self._is_realtime_model:
-            _patch_realtime_processor_language_support(self._processor)
-
         model_kwargs = {
             "local_files_only": local_only,
             "device_map": self._device,
@@ -513,9 +434,11 @@ class VoxtralTranscriber(ITranscriber):
             try:
                 if self._is_realtime_model:
                     # Gen2 realtime API: processor takes the audio array directly.
-                    # Set the language hint so our patched __call__ forwards it to
-                    # TranscriptionRequest for improved language adherence.
-                    self._processor._language_hint = language_only
+                    # NOTE: Gen2 streaming models do not support language hints.
+                    # While TranscriptionRequest has a language field, the streaming
+                    # tokenizer in mistral_common ignores it entirely — the token
+                    # sequence is identical regardless of the language value.
+                    # Language is determined purely by the model from the audio.
                     model_inputs = self._processor(wav, sampling_rate=sample_rate, return_tensors="pt")
                 else:
                     # Gen1 legacy API: apply_transcription_request with explicit parameters
