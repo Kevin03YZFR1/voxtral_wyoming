@@ -15,10 +15,14 @@ services:
       # port _within_ the container needs to be stable
       - PORT=10300
       - AUDIO_SAVE_DIR=/output/audio
+      - WORD_REPLACEMENTS_FILE=/config/word_replacements.txt
     volumes:
       # Mount local model directory (optional, for pre-downloaded models)
       # Uncomment and adjust path if you have models stored locally
       # - ./models:/models:ro
+
+      # Word replacements file for post-transcription corrections
+      - ./word_replacements.txt:/config/word_replacements.txt:ro
 
       # Mount directory for saved audio files (when SAVE_AUDIO=true)
       - ./output/audio:/output/audio

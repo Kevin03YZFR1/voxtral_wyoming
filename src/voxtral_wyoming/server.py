@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from .transcriber.voxtral import VoxtralTranscriber, VoxtralConfig
 from .transcriber.base import ITranscriber
 from .audio import AudioSpec, clamp_audio_size, save_audio_as_wav
+from .text import TextPostProcessor
 
 _LOGGER = logging.getLogger("voxtral_wyoming")
 
@@ -26,6 +27,7 @@ async def _wyoming_handle_client(
     max_seconds: float,
     save_audio: bool,
     audio_save_dir: str,
+    text_processor: TextPostProcessor,
     model_ready: asyncio.Event,
     model_error: list,
 ) -> None:
@@ -176,6 +178,8 @@ async def _wyoming_handle_client(
                     text = ""
                     lang_out = lang_hint
 
+                text = text_processor.apply(text)
+
                 # Save audio if enabled (after transcription to include text in filename)
                 if save_audio and audio_pcm:
                     try:
@@ -215,7 +219,7 @@ async def _wyoming_handle_client(
         _LOGGER.debug("Client disconnected: %s", addr)
 
 
-async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: int, transcriber: ITranscriber, max_seconds: float, save_audio: bool, audio_save_dir: str) -> None:
+async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: int, transcriber: ITranscriber, max_seconds: float, save_audio: bool, audio_save_dir: str, text_processor: TextPostProcessor | None = None) -> None:
     """Run a Wyoming TCP server over asyncio that handles ASR streams.
 
     The server starts accepting connections immediately. If the model is
@@ -223,6 +227,9 @@ async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: 
     before processing — so clients get a brief pause instead of a
     connection-refused error.
     """
+    if text_processor is None:
+        text_processor = TextPostProcessor()
+
     model_ready = asyncio.Event()
     model_error: list[Exception] = []
 
@@ -251,6 +258,7 @@ async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: 
             max_seconds=max_seconds,
             save_audio=save_audio,
             audio_save_dir=audio_save_dir,
+            text_processor=text_processor,
             model_ready=model_ready,
             model_error=model_error,
         ),
@@ -310,6 +318,18 @@ def cli() -> None:
     else:
         _LOGGER.info("Audio saving disabled")
 
+    # Parse word replacement configuration
+    word_replacements_inline = os.getenv("WORD_REPLACEMENTS")
+    word_replacements_file = os.getenv("WORD_REPLACEMENTS_FILE")
+    try:
+        text_processor = TextPostProcessor(
+            inline=word_replacements_inline,
+            file_path=word_replacements_file,
+        )
+    except (ValueError, FileNotFoundError) as e:
+        _LOGGER.error("Failed to parse word replacements: %s", e)
+        sys.exit(1)
+
     # Create transcriber with deferred model loading.
     # The heavy model weights are loaded asynchronously once the server
     # is already listening, so early client connections wait instead of
@@ -317,7 +337,7 @@ def cli() -> None:
     transcriber: ITranscriber = VoxtralTranscriber(VoxtralConfig(), eager=False)
 
     try:
-        asyncio.run(_run_wyoming_server(host, port, language, sample_rate, transcriber, max_seconds, save_audio, audio_save_dir))
+        asyncio.run(_run_wyoming_server(host, port, language, sample_rate, transcriber, max_seconds, save_audio, audio_save_dir, text_processor))
     except KeyboardInterrupt:
         _LOGGER.info("Shutting down (keyboard interrupt)")
 

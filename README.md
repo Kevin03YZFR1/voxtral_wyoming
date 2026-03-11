@@ -12,6 +12,7 @@ The goal is to provide a powerful drop-in alternative to the popular Whisper STT
 - 🐳 **Docker Ready**: Containerized deployment with non-root user
 - ⚡ **Device Flexibility**: CPU, CUDA (NVIDIA), or MPS (Apple Silicon) support
 - 💬 **Chat Mode** (Gen1 only): Optional chat mode with custom system prompts for domain-specific context
+- 🔤 **Word Replacement**: Post-transcription word/phrase replacement to fix recurring STT mistakes
 
 ## TLDR
 
@@ -174,6 +175,8 @@ You probably want to check out at least these options, though:
 - **`SYSTEM_PROMPT`** - Custom instructions for chat mode (Gen1 only, requires `USE_CHAT_MODE=true`)
   - Customize to guide transcription for smart home commands or specific vocabulary
   - Should be in the language you expect to speak
+
+- **`WORD_REPLACEMENTS`** / **`WORD_REPLACEMENTS_FILE`** - Fix recurring STT mistakes by replacing words/phrases after transcription (e.g. `schaltet -> schalte`). Docker Compose users can simply edit `word_replacements.txt`.
 
 For all available configuration options, see `.env.example` with detailed documentation.
 
