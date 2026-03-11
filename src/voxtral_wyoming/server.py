@@ -13,19 +13,6 @@ from .transcriber.voxtral import VoxtralTranscriber, VoxtralConfig
 from .transcriber.base import ITranscriber
 from .audio import AudioSpec, clamp_audio_size, save_audio_as_wav
 
-# Voxtral supported languages
-# see https://huggingface.co/mistralai/Voxtral-Mini-3B-2507
-SUPPORTED_LANGUAGES = [
-    "en-US",  # English
-    "fr-FR",  # French
-    "de-DE",  # German
-    "es-ES",  # Spanish
-    "it-IT",  # Italian
-    "pt-PT",  # Portuguese
-    "nl-NL",  # Dutch
-    "hi-IN",  # Hindi
-]
-
 _LOGGER = logging.getLogger("voxtral_wyoming")
 
 
@@ -36,7 +23,7 @@ async def _wyoming_handle_client(
     language: str,
     default_sample_rate: int,
     transcriber: ITranscriber,
-    max_seconds: int,
+    max_seconds: float,
     save_audio: bool,
     audio_save_dir: str,
 ) -> None:
@@ -86,7 +73,7 @@ async def _wyoming_handle_client(
                     installed=True,
                     description="Offline STT with Mistral Voxtral",
                     version=VW_VERSION,
-                    languages=SUPPORTED_LANGUAGES,
+                    languages=transcriber.supported_languages,
                 )
                 asr_program = AsrProgram(
                     name="voxtral-wyoming",
@@ -210,7 +197,7 @@ async def _wyoming_handle_client(
         _LOGGER.debug("Client disconnected: %s", addr)
 
 
-async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: int, transcriber: ITranscriber, max_seconds: int, save_audio: bool, audio_save_dir: str) -> None:
+async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: int, transcriber: ITranscriber, max_seconds: float, save_audio: bool, audio_save_dir: str) -> None:
     """Run a Wyoming TCP server over asyncio that handles ASR streams."""
     server = await asyncio.start_server(
         lambda r, w: _wyoming_handle_client(
@@ -259,14 +246,14 @@ def cli() -> None:
     port = int(os.getenv("PORT", "10300"))
     language = os.getenv("LANGUAGE_FALLBACK", "en-US")
     sample_rate = int(os.getenv("SAMPLE_RATE_FALLBACK", "16000"))
-    max_seconds = int(os.getenv("MAX_SECONDS", "60"))
+    max_seconds = float(os.getenv("MAX_SECONDS", "30"))
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
     save_audio = os.getenv("SAVE_AUDIO", "false").lower() in ("true", "1", "yes")
     audio_save_dir = os.getenv("AUDIO_SAVE_DIR", "/output/audio")
 
     logging.basicConfig(level=getattr(logging, log_level, logging.INFO), format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
     _LOGGER.info(
-        "Starting Voxtral Wyoming STT on %s:%d | language=%s sample_rate=%d max_seconds=%d",
+        "Starting Voxtral Wyoming STT on %s:%d | language=%s sample_rate=%d max_seconds=%.1f",
         host,
         port,
         language,

@@ -24,9 +24,9 @@ def expected_bytes_per_second(spec: AudioSpec) -> int:
     return spec.sample_rate * spec.channels * spec.sample_width_bytes
 
 
-def clamp_audio_size(audio: bytes, spec: AudioSpec, max_seconds: int = 60) -> bytes:
+def clamp_audio_size(audio: bytes, spec: AudioSpec, max_seconds: float = 60) -> bytes:
     """Clamp audio to a maximum number of seconds to avoid unbounded memory use."""
-    max_bytes = expected_bytes_per_second(spec) * max_seconds
+    max_bytes = int(expected_bytes_per_second(spec) * max_seconds)
     if len(audio) > max_bytes:
         return audio[:max_bytes]
     return audio

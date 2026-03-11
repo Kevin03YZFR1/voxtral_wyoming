@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pycountry import languages
-
 """Voxtral-backed transcriber implementation using Mistral's Voxtral model.
 
 Offline-only execution that loads local model files (no network calls).
@@ -16,6 +14,10 @@ import logging
 from .base import ITranscriber, TranscriptionResult
 
 _logger = logging.getLogger("voxtral_wyoming.transcriber")
+
+# Languages supported by each Voxtral generation
+VOXTRAL_GEN1_LANGUAGES = ["en-US", "fr-FR", "de-DE", "es-ES", "it-IT", "pt-PT", "nl-NL", "hi-IN"]
+VOXTRAL_GEN2_LANGUAGES = VOXTRAL_GEN1_LANGUAGES + ["ar-SA", "zh-CN", "ja-JP", "ko-KR", "ru-RU"]
 
 
 def _detect_device() -> str:
@@ -59,22 +61,23 @@ class VoxtralConfig:
     device: str = None  # type: ignore
     dtype: Optional[str] = None
     locale: str = None  # type: ignore
-    max_new_tokens: int = None  # type: ignore
+    max_seconds: float = None  # type: ignore
     use_chat_mode: bool = None  # type: ignore
     system_prompt: str = None  # type: ignore
+    transcription_delay_ms: Optional[int] = None
 
     def __post_init__(self):
         """Load values from environment variables if not explicitly provided."""
         if self.model_id is None:
-            self.model_id = os.getenv("MODEL_ID", "mistralai/Voxtral-Mini-3B-2507")
+            self.model_id = os.getenv("MODEL_ID", "mistralai/Voxtral-Mini-4B-Realtime-2602")
         if self.device is None:
             self.device = os.getenv("DEVICE", "auto")
         if self.dtype is None:
             self.dtype = os.getenv("DATA_TYPE", None)
         if self.locale is None:
             self.locale = os.getenv("LANGUAGE_FALLBACK", "en-US")
-        if self.max_new_tokens is None:
-            self.max_new_tokens = int(os.getenv("MAX_NEW_TOKENS", "128"))
+        if self.max_seconds is None:
+            self.max_seconds = float(os.getenv("MAX_SECONDS", "30"))
         if self.use_chat_mode is None:
             self.use_chat_mode = os.getenv("USE_CHAT_MODE", "false").lower() in ("true", "1", "yes")
         if self.system_prompt is None:
@@ -84,6 +87,42 @@ class VoxtralConfig:
                 "Commands are typically short, imperative sentences like 'turn on the lights' or 'set temperature to 20 degrees'. "
                 "Focus on accuracy and be aware of smart home terminology."
             )
+        if self.transcription_delay_ms is None:
+            env_val = os.getenv("TRANSCRIPTION_DELAY_MS", None)
+            if env_val is not None:
+                self.transcription_delay_ms = int(env_val)
+        _validate_transcription_delay_ms(self.transcription_delay_ms)
+
+
+# Valid transcription_delay_ms values: multiples of 80 from 80–1200, plus 2400
+_VALID_DELAY_VALUES = set(range(80, 1201, 80)) | {2400}
+
+
+def _validate_transcription_delay_ms(value: Optional[int]) -> Optional[int]:
+    """Validate transcription_delay_ms value.
+
+    Valid values: multiples of 80 from 80 to 1200, or exactly 2400.
+    Returns None if input is None (meaning 'use model default').
+    """
+    if value is None:
+        return None
+    if value not in _VALID_DELAY_VALUES:
+        raise ValueError(
+            f"Invalid TRANSCRIPTION_DELAY_MS={value}. "
+            f"Must be a multiple of 80 between 80 and 1200, or exactly 2400. "
+            f"Recommended value: 480 (best balance of latency and accuracy)."
+        )
+    return value
+
+
+def _delay_ms_to_tokens(delay_ms: int) -> int:
+    """Convert transcription_delay_ms to num_delay_tokens.
+
+    For Voxtral Realtime models with default audio parameters
+    (sampling_rate=16000, hop_length=160, audio_length_per_tok=8),
+    each token corresponds to 80ms of audio.
+    """
+    return delay_ms // 80
 
 
 def _locale_to_lang(locale: Optional[str]) -> Optional[str]:
@@ -125,8 +164,6 @@ def _map_dtype(dtype_str: Optional[str]):
     if norm in ("fp8", "float8"):
         return torch.float8_e4m3fn  # FP8 E4M3 format (most common)
 
-    import logging
-    _logger = logging.getLogger("voxtral_wyoming.transcriber")
     _logger.warning(f"Unknown dtype: {dtype_str}. Using auto-detection instead")
 
     return None
@@ -181,6 +218,7 @@ class VoxtralTranscriber(ITranscriber):
         self._loaded = False
         self._processor = None
         self._model = None
+        self._is_realtime_model = False
 
         # Auto-detect device if set to 'auto'
         if self.config.device.lower() == "auto":
@@ -199,19 +237,16 @@ class VoxtralTranscriber(ITranscriber):
             return
 
         try:
-            from transformers import VoxtralForConditionalGeneration, AutoProcessor  # type: ignore
+            from transformers import AutoConfig, AutoProcessor  # type: ignore
         except Exception as e:  # pragma: no cover - only when voxtral backend is used
             raise ImportError(
-                "transformers is required for VoxtralTranscriber. Install transformers >= 4.42."
+                "transformers is required for VoxtralTranscriber. Install transformers >= 5.2."
             ) from e
 
         import torch  # type: ignore
-        import logging
-
-        _logger = logging.getLogger("voxtral_wyoming.transcriber")
 
         model_id = self.config.model_id
-        local_only = False
+        local_only = os.path.isabs(model_id)
 
         # Resolve dtype - None means auto-detect from model
         self._dtype = _map_dtype(self.config.dtype)
@@ -223,27 +258,52 @@ class VoxtralTranscriber(ITranscriber):
             dtype_display = str(self._dtype) if hasattr(self._dtype, '__name__') else self._dtype
             _logger.info(f"Loading model {model_id} with manually specified data type: {dtype_display}")
 
-        # Load processor and model from local files/cache
+        # Detect gen1 vs gen2 from model config metadata.
+        # Gen2 (realtime) models have model_type="voxtral_realtime",
+        # Gen1 (legacy) models have model_type="voxtral".
+        model_config = AutoConfig.from_pretrained(model_id, local_files_only=local_only)
+        self._is_realtime_model = model_config.model_type == "voxtral_realtime"
+        _logger.info(f"Detected {'gen2 realtime' if self._is_realtime_model else 'gen1 legacy'} model (model_type={model_config.model_type!r})")
+
+        # Import the correct model class based on detected generation
+        if self._is_realtime_model:
+            try:
+                from transformers import VoxtralRealtimeForConditionalGeneration  # type: ignore
+                _model_cls = VoxtralRealtimeForConditionalGeneration
+            except ImportError:
+                raise ImportError(
+                    f"Model {model_id} is a gen2 realtime model but VoxtralRealtimeForConditionalGeneration "
+                    f"is not available. Install transformers >= 5.2."
+                )
+        else:
+            try:
+                from transformers import VoxtralForConditionalGeneration  # type: ignore
+                _model_cls = VoxtralForConditionalGeneration
+            except ImportError:
+                raise ImportError(
+                    f"Model {model_id} is a gen1 model but VoxtralForConditionalGeneration "
+                    f"is not available. Install transformers >= 4.57."
+                )
+
+        # Load processor and model
         self._processor = AutoProcessor.from_pretrained(model_id, local_files_only=local_only)
 
-        # Load model with dtype parameter (None = auto-detect) and device_map to avoid slow CPU->GPU transfer
-        # Using device_map loads model directly on target device, avoiding expensive CPU->GPU memory transfer
-        try:
-            # Prepare model loading kwargs
-            model_kwargs = {
-                "local_files_only": local_only,
-                "device_map": self._device,
-            }
-            if self._dtype is not None:
-                model_kwargs["dtype"] = self._dtype
+        model_kwargs = {
+            "local_files_only": local_only,
+            "device_map": self._device,
+        }
+        if self._dtype is not None:
+            model_kwargs["torch_dtype"] = self._dtype
 
-            self._model = VoxtralForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
+        try:
+            self._model = _model_cls.from_pretrained(model_id, **model_kwargs)
         except Exception as e:
-            # Fallback to CPU if device loading fails
             _logger.warning(f"Failed to load model on {self._device}: {e}. Falling back to CPU")
             self._device = "cpu"
             model_kwargs["device_map"] = "cpu"
-            self._model = VoxtralForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
+            self._model = _model_cls.from_pretrained(model_id, **model_kwargs)
+
+        _logger.info(f"Model loaded using {_model_cls.__name__}")
 
         # Log the actual dtype that was loaded
         if hasattr(self._model, 'dtype'):
@@ -253,22 +313,49 @@ class VoxtralTranscriber(ITranscriber):
             try:
                 first_param_dtype = next(self._model.parameters()).dtype
                 _logger.info(f"Model loaded successfully with data type: {first_param_dtype}")
-            except:
+            except Exception:
                 _logger.info(f"Model loaded successfully (data type detection unavailable)")
 
         # Model is already on the target device via device_map, just set eval mode
         self._model.eval()
 
+        # Apply transcription_delay_ms for Gen2 realtime models.
+        # Must be set on the processor's audio config BEFORE processing audio,
+        # so that both the audio padding and num_delay_tokens are consistent.
+        if self._is_realtime_model and self.config.transcription_delay_ms is not None:
+            delay_ms = self.config.transcription_delay_ms
+            self._processor.mistral_common_audio_config.transcription_delay_ms = float(delay_ms)
+            num_tokens = _delay_ms_to_tokens(delay_ms)
+            self._model.config.default_num_delay_tokens = num_tokens
+            _logger.info(f"Transcription delay set to {delay_ms}ms ({num_tokens} delay tokens)")
+        elif self._is_realtime_model:
+            default_tokens = getattr(self._model.config, "default_num_delay_tokens", "unknown")
+            _logger.info(f"Using model's default transcription delay ({default_tokens} delay tokens)")
+        elif self.config.transcription_delay_ms is not None:
+            _logger.warning(
+                f"TRANSCRIPTION_DELAY_MS={self.config.transcription_delay_ms} is only supported "
+                f"for Gen2 realtime models. Ignoring for Gen1 model."
+            )
+
+        if self._is_realtime_model and self.config.use_chat_mode:
+            raise ValueError(
+                "USE_CHAT_MODE=true is not supported for Gen2 realtime models. "
+                "The Gen2 processor does not have a chat template. "
+                "Disable chat mode or switch to a Gen1 model."
+            )
+
         self._loaded = True
+
+    @property
+    def supported_languages(self) -> list[str]:
+        """Return the language list for the loaded model generation."""
+        return VOXTRAL_GEN2_LANGUAGES if self._is_realtime_model else VOXTRAL_GEN1_LANGUAGES
 
     def transcribe(self, audio_pcm: bytes, sample_rate: int, locale: Optional[str] = None) -> TranscriptionResult:
         # Lazy-load heavy deps and model
         self._ensure_loaded()
 
         import torch  # type: ignore
-        import logging
-
-        _logger = logging.getLogger("voxtral_wyoming.transcriber")
 
         # Start timing for overall transcription
         start_time = time.perf_counter()
@@ -288,6 +375,14 @@ class VoxtralTranscriber(ITranscriber):
 
         # Prepare audio as float32 numpy array in [-1, 1]
         wav = _pcm16_le_bytes_to_float32(audio_pcm)
+
+        # Resample if the incoming audio rate doesn't match the processor's expected rate
+        target_sr = self._processor.feature_extractor.sampling_rate
+        if sample_rate != target_sr:
+            import soxr
+            _logger.info(f"Resampling audio from {sample_rate}Hz to {target_sr}Hz")
+            wav = soxr.resample(wav, sample_rate, target_sr)
+            sample_rate = target_sr
 
         # Log transcription start with key parameters
         mode_str = "chat mode" if self.config.use_chat_mode else "transcribe-only mode"
@@ -337,13 +432,23 @@ class VoxtralTranscriber(ITranscriber):
             # Pass the audio as numpy array directly (not base64) so the processor
             # can properly extract audio features using WhisperFeatureExtractor
             try:
-                model_inputs = self._processor.apply_transcription_request(
-                    language=language_only,
-                    audio=wav,
-                    model_id=self.config.model_id,
-                    sampling_rate=sample_rate,
-                    format=["wav"]  # WAV is the container format for PCM audio data
-                )
+                if self._is_realtime_model:
+                    # Gen2 realtime API: processor takes the audio array directly.
+                    # NOTE: Gen2 streaming models do not support language hints.
+                    # While TranscriptionRequest has a language field, the streaming
+                    # tokenizer in mistral_common ignores it entirely — the token
+                    # sequence is identical regardless of the language value.
+                    # Language is determined purely by the model from the audio.
+                    model_inputs = self._processor(wav, sampling_rate=sample_rate, return_tensors="pt")
+                else:
+                    # Gen1 legacy API: apply_transcription_request with explicit parameters
+                    model_inputs = self._processor.apply_transcription_request(
+                        language=language_only,
+                        audio=wav,
+                        model_id=self.config.model_id,
+                        sampling_rate=sample_rate,
+                        format=["wav"],  # WAV is the container format for PCM audio data
+                    )
             except Exception as e:
                 raise RuntimeError(f"Error preparing audio for model: {e}") from e
 
@@ -351,27 +456,25 @@ class VoxtralTranscriber(ITranscriber):
             # apply_transcription_request returns a BatchEncoding object with input_ids
             input_ids_length = model_inputs.get("input_ids").shape[1] if "input_ids" in model_inputs else 0
 
-        # Move inputs to device - use .to() method if available to preserve BatchEncoding structure
-        try:
-            if hasattr(model_inputs, 'to'):
-                # BatchEncoding has a .to() method that preserves structure
-                model_inputs = model_inputs.to(self._device)
-            else:
-                # Fallback for plain dict
-                model_inputs = {
-                    k: v.to(self._device) if hasattr(v, 'to') else v
-                    for k, v in model_inputs.items()
-                }
-        except Exception as e:
-            _logger.warning(f"Could not move inputs to device {self._device}: {e}")
-            pass  # Fallback: use inputs as-is if device move fails
+        # Move inputs to the model's device and dtype.
+        # BatchFeature.to() in transformers >= 5.2 handles integer tensors correctly.
+        model_inputs = model_inputs.to(self._model.device, dtype=self._model.dtype)
 
-        # Generate with CPU-friendly, deterministic settings
-        gen_kwargs = {
-            "max_new_tokens": self.config.max_new_tokens,
+        # Generation settings — greedy decoding per model card (temperature=0).
+        # We use do_sample=False instead of passing temperature=0.0, because
+        # HuggingFace generate() does not accept temperature as a valid kwarg
+        # when sampling is disabled.
+        # Always set max_new_tokens (derived from max_seconds via 80ms/token formula)
+        # for all model variants. Gen2 will still stop early via EOS, but without
+        # an explicit limit transformers falls back to max_length=97 which is too
+        # low and triggers a noisy warning.
+        gen2_transcribe_only = self._is_realtime_model and not self.config.use_chat_mode
+        gen_kwargs: dict = {
             "do_sample": False,
-            "num_beams": 1,
+            "max_new_tokens": int(self.config.max_seconds / 0.08),
         }
+        if not gen2_transcribe_only:
+            gen_kwargs["num_beams"] = 1
 
         # Time the model inference
         inference_start = time.perf_counter()
@@ -383,19 +486,17 @@ class VoxtralTranscriber(ITranscriber):
         inference_time = time.perf_counter() - inference_start
         _logger.debug(f"Model inference completed in {inference_time:.2f}s")
 
-        # Decode the outputs
-        # For apply_transcription_request, we need to skip the prompt tokens
-        # The HuggingFace example shows: outputs[:, inputs.input_ids.shape[1]:]
+        # Decode the outputs.
+        # Gen2 realtime transcribe-only: decode full output (official API pattern).
+        # Gen1 / chat mode: slice off prompt tokens first.
         try:
-            # Decode with proper slicing to remove prompt tokens
-            if input_ids_length > 0:
-                # Slice to get only generated tokens (excluding prompt)
-                generated_tokens = outputs[:, input_ids_length:]
+            if gen2_transcribe_only:
+                decoded = self._processor.batch_decode(outputs, skip_special_tokens=True)
+            elif input_ids_length > 0:
                 decoded = self._processor.batch_decode(
-                    generated_tokens, skip_special_tokens=True
+                    outputs[:, input_ids_length:], skip_special_tokens=True
                 )
             else:
-                # No input_ids or length is 0, decode full output
                 decoded = self._processor.batch_decode(outputs, skip_special_tokens=True)
         except Exception as e:
             _logger.error(f"Error decoding tokens: {e}", exc_info=True)
@@ -411,7 +512,11 @@ class VoxtralTranscriber(ITranscriber):
                 text = text[1:-1].strip()
 
         _logger.info(f"Final transcription text (length={len(text)} chars): {text[:100]}{'...' if len(text) > 100 else ''}")
-        duration = len(audio_pcm) / float(2 * max(1, sample_rate)) if audio_pcm else 0.0
+        # Compute duration from original PCM bytes at the original incoming rate.
+        # After resampling, sample_rate has been reassigned to the target rate,
+        # but audio_pcm still contains bytes at the original rate. Use len(wav)
+        # (float32 samples, already resampled) with the current sample_rate instead.
+        duration = len(wav) / float(max(1, sample_rate)) if audio_pcm else 0.0
 
         # Log total transcription time
         total_time = time.perf_counter() - start_time

@@ -6,6 +6,7 @@ import socket
 import subprocess
 import sys
 import shutil
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Optional
@@ -13,9 +14,14 @@ from typing import Optional
 from dotenv import load_dotenv
 
 
-def _download(url: str) -> bytes:
-    with urllib.request.urlopen(url) as resp:  # nosec - user-specified URL to public sample
-        return resp.read()
+def _load_audio(source: str) -> bytes:
+    """Load audio bytes from a local file path or a remote URL."""
+    parsed = urllib.parse.urlparse(source)
+    if parsed.scheme in ("http", "https"):
+        with urllib.request.urlopen(source) as resp:  # nosec - user-specified URL to public sample
+            return resp.read()
+    # Treat as a local file path (absolute or relative)
+    return Path(source).expanduser().resolve().read_bytes()
 
 
 def _maybe_convert_to_pcm16(audio_bytes: bytes, sample_rate: int = 16000) -> tuple[bytes, bool]:
@@ -61,12 +67,14 @@ def _maybe_convert_to_pcm16(audio_bytes: bytes, sample_rate: int = 16000) -> tup
 def transcribe_sample(
     host: str = "127.0.0.1",
     port: int = int(os.getenv("PORT", "10300")),
-    url: str = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
+    source: str = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
     sample_rate: int = int(os.getenv("SAMPLE_RATE_FALLBACK", "16000")),
     convert: bool = True,
 ) -> dict:
     """
     Connect to a running voxtral-wyoming server using the Wyoming protocol and return the transcript.
+
+    *source* can be a remote URL (http/https) or a local file path (absolute or relative).
 
     Flow: Describe -> Transcribe -> AudioStart -> AudioChunk* -> AudioStop -> Transcript
     """
@@ -76,7 +84,7 @@ def transcribe_sample(
     from wyoming.asr import Transcribe, Transcript  # type: ignore
     from wyoming.info import Describe  # type: ignore
 
-    audio_bytes = _download(url)
+    audio_bytes = _load_audio(source)
     used_ffmpeg = False
     if convert:
         converted, used_ffmpeg = _maybe_convert_to_pcm16(audio_bytes, sample_rate=sample_rate)
@@ -155,7 +163,7 @@ def transcribe_sample(
     resp_json.setdefault("_client", {})
     resp_json["_client"].update(
         {
-            "url": url,
+            "source": source,
             "converted_pcm16": bool(convert and used_ffmpeg),
             "sample_rate": sample_rate,
             "host": host,
@@ -186,7 +194,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     # Read configuration from environment variables
     host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", "10300"))
-    url = os.getenv("SAMPLE_URL", "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3")
+    source = os.getenv("SAMPLE_FILE", "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3")
     sample_rate = int(os.getenv("SAMPLE_RATE_FALLBACK", "16000"))
     convert = os.getenv("CONVERT_AUDIO", "true").lower() in ("true", "1", "yes")
 
@@ -194,7 +202,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         result = transcribe_sample(
             host=host,
             port=port,
-            url=url,
+            source=source,
             sample_rate=sample_rate,
             convert=convert,
         )
