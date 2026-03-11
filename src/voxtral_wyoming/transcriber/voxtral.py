@@ -213,7 +213,7 @@ class VoxtralTranscriber(ITranscriber):
     transcription for PCM16 mono audio.
     """
 
-    def __init__(self, config: Optional[VoxtralConfig] = None):
+    def __init__(self, config: Optional[VoxtralConfig] = None, eager: bool = True):
         self.config = config or VoxtralConfig()
         self._loaded = False
         self._processor = None
@@ -230,7 +230,8 @@ class VoxtralTranscriber(ITranscriber):
         self._dtype = None
 
         # Preload everything on server startup to prevent slowing down first request
-        self._ensure_loaded()
+        if eager:
+            self._ensure_loaded()
 
     def _ensure_loaded(self) -> None:
         if self._loaded:

@@ -26,6 +26,8 @@ async def _wyoming_handle_client(
     max_seconds: float,
     save_audio: bool,
     audio_save_dir: str,
+    model_ready: asyncio.Event,
+    model_error: list,
 ) -> None:
     """Handle a single Wyoming TCP connection for ASR.
 
@@ -34,6 +36,22 @@ async def _wyoming_handle_client(
     """
     addr = writer.get_extra_info("peername")
     _LOGGER.debug("Client connected from %s", addr)
+
+    # Wait for the model to finish loading before processing any events.
+    # The TCP connection is accepted immediately so clients don't get
+    # "connection refused" during startup — they just wait briefly.
+    if not model_ready.is_set():
+        _LOGGER.info("Client %s connected while model is still loading, waiting...", addr)
+        await model_ready.wait()
+
+    if model_error:
+        _LOGGER.error("Model failed to load, rejecting client %s", addr)
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except Exception:
+            pass
+        return
 
     try:
         # Lazy imports to keep module import cheap
@@ -198,7 +216,31 @@ async def _wyoming_handle_client(
 
 
 async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: int, transcriber: ITranscriber, max_seconds: float, save_audio: bool, audio_save_dir: str) -> None:
-    """Run a Wyoming TCP server over asyncio that handles ASR streams."""
+    """Run a Wyoming TCP server over asyncio that handles ASR streams.
+
+    The server starts accepting connections immediately. If the model is
+    still loading, client handlers wait for the ``model_ready`` event
+    before processing — so clients get a brief pause instead of a
+    connection-refused error.
+    """
+    model_ready = asyncio.Event()
+    model_error: list[Exception] = []
+
+    async def _load_model() -> None:
+        """Load the model in a background thread so the event loop stays free."""
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, transcriber._ensure_loaded)
+            _LOGGER.info("Model loaded and ready for requests")
+        except Exception as e:
+            _LOGGER.exception("Failed to load model in background: %s", e)
+            model_error.append(e)
+        finally:
+            model_ready.set()
+
+    # Kick off model loading in the background
+    asyncio.create_task(_load_model())
+
     server = await asyncio.start_server(
         lambda r, w: _wyoming_handle_client(
             r,
@@ -209,13 +251,15 @@ async def _run_wyoming_server(host: str, port: int, language: str, sample_rate: 
             max_seconds=max_seconds,
             save_audio=save_audio,
             audio_save_dir=audio_save_dir,
+            model_ready=model_ready,
+            model_error=model_error,
         ),
         host,
         port,
     )
 
     addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets or [])
-    _LOGGER.info("Wyoming server successfully started. Ready to listen for client calls on %s.", addrs)
+    _LOGGER.info("Wyoming server listening on %s (model loading in background...)", addrs)
 
     async with server:
         await server.serve_forever()
@@ -266,13 +310,11 @@ def cli() -> None:
     else:
         _LOGGER.info("Audio saving disabled")
 
-    # Initialize Voxtral transcriber
-    try:
-        transcriber: ITranscriber = VoxtralTranscriber(VoxtralConfig())
-        _LOGGER.info("Voxtral transcriber initialization completed")
-    except Exception as e:
-        _LOGGER.exception("Failed to initialize Voxtral backend: %s", e)
-        raise SystemExit(2)
+    # Create transcriber with deferred model loading.
+    # The heavy model weights are loaded asynchronously once the server
+    # is already listening, so early client connections wait instead of
+    # being refused.
+    transcriber: ITranscriber = VoxtralTranscriber(VoxtralConfig(), eager=False)
 
     try:
         asyncio.run(_run_wyoming_server(host, port, language, sample_rate, transcriber, max_seconds, save_audio, audio_save_dir))
