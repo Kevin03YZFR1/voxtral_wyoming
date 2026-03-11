@@ -464,13 +464,16 @@ class VoxtralTranscriber(ITranscriber):
         # We use do_sample=False instead of passing temperature=0.0, because
         # HuggingFace generate() does not accept temperature as a valid kwarg
         # when sampling is disabled.
-        # Gen2 realtime transcribe-only: the model auto-determines output length from audio,
-        # so we don't pass max_new_tokens.  Gen1 and chat mode: derive from max_seconds
-        # using the 80ms/token formula (e.g. 60s → 750 tokens).
+        # Always set max_new_tokens (derived from max_seconds via 80ms/token formula)
+        # for all model variants. Gen2 will still stop early via EOS, but without
+        # an explicit limit transformers falls back to max_length=97 which is too
+        # low and triggers a noisy warning.
         gen2_transcribe_only = self._is_realtime_model and not self.config.use_chat_mode
-        gen_kwargs: dict = {"do_sample": False}
+        gen_kwargs: dict = {
+            "do_sample": False,
+            "max_new_tokens": int(self.config.max_seconds / 0.08),
+        }
         if not gen2_transcribe_only:
-            gen_kwargs["max_new_tokens"] = int(self.config.max_seconds / 0.08)
             gen_kwargs["num_beams"] = 1
 
         # Time the model inference
