@@ -29,6 +29,7 @@ services:
 
       # Persist HuggingFace cache (optional)
       - huggingface_cache:/home/appuser/.cache/huggingface
+    restart: unless-stopped
 
 volumes:
   huggingface_cache:
