@@ -1,0 +1,47 @@
+services:
+  voxtral-wyoming:
+    build:
+      context: .
+      dockerfile: Dockerfile.cu130
+    image: voxtral-wyoming:cu130
+    container_name: voxtral-wyoming
+    ports:
+      - "${PORT:-10301}:10301"
+    env_file: ./.env
+    environment:
+      # IP's used on the host machine are usually not available within the docker container, but will get used by the
+      # port definition made above.
+      - HOST=0.0.0.0
+      # port _within_ the container needs to be stable
+      - PORT=10301
+      - AUDIO_SAVE_DIR=/output/audio
+      - WORD_REPLACEMENTS_FILE=/config/word_replacements.txt
+    volumes:
+      # Mount local model directory (optional, for pre-downloaded models)
+      # Uncomment and adjust path if you have models stored locally
+      #- ./models:/models:ro
+      
+      # Mount for .env file
+      - ./.env:/app/.env:ro
+      
+      # Word replacements file for post-transcription corrections
+      - ./word_replacements.txt:/config/word_replacements.txt:ro
+
+      # Mount directory for saved audio files (when SAVE_AUDIO=true)
+      - ./output/audio:/output/audio
+
+      # Persist HuggingFace cache (optional)
+      #- huggingface_cache:/home/appuser/.cache/huggingface
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    restart: unless-stopped
+
+volumes:
+  huggingface_cache:

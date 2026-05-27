@@ -1,0 +1,45 @@
+--extra-index-url https://download.pytorch.org/whl/nightly/cu130
+
+# =========================
+# TORCH (BLACKWELL / CUDA 13)
+# =========================
+torch
+torchvision
+torchaudio
+
+# =========================
+# CORE ML STACK
+# =========================
+transformers>=4.46.0
+accelerate>=0.30.0
+safetensors>=0.5.0
+einops>=0.7.0
+
+wyoming>=1.5.0
+python-dotenv>=1.0.0
+transformers>=5.9.0
+soxr>=0.3.0
+mistral-common[audio]>=1.9.1
+accelerate>=1.10.1
+librosa>=0.11.0
+compressed-tensors>=0.12.2
+
+# =========================
+# AUDIO / STT PIPELINE
+# =========================
+soundfile>=0.12.0
+numpy>=1.24.0
+librosa>=0.10.0
+
+# =========================
+# FAST API / SERVER
+# =========================
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+
+# =========================
+# UTILITIES
+# =========================
+PyYAML>=6.0
+requests>=2.31.0
+tqdm>=4.66.0
