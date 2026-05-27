@@ -1,0 +1,58 @@
+# ============================================================================
+# VOXTRAL WYOMING - CUDA 13 / BLACKWELL (sm_120 / sm_121)
+# ============================================================================
+FROM nvcr.io/nvidia/cuda:13.0.1-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV HF_HOME=/app/hf_cache
+ENV PATH="/usr/local/bin:${PATH}"
+
+# ----------------------------------------------------------
+# System deps
+# ----------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3.11-dev python3.11-venv \
+    python3-pip git curl ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python3 && \
+    ln -sf /usr/bin/python3.11 /usr/bin/python
+
+RUN python -m pip install --upgrade pip setuptools wheel
+
+WORKDIR /app
+
+# ----------------------------------------------------------
+# System audio deps
+# ----------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libffi-dev \
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ----------------------------------------------------------
+# PyTorch
+# ----------------------------------------------------------
+RUN pip install --no-cache-dir \
+    torch==2.11.0+cu130 \
+    torchvision==0.26.0+cu130 \
+    torchaudio==2.11.0+cu130 \
+    --index-url https://download.pytorch.org/whl/cu130
+
+# ----------------------------------------------------------
+# App code (Control install order)
+# ----------------------------------------------------------
+COPY requirements.txt /app/requirements.txt
+COPY src /app/src
+
+# Requirements
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ----------------------------------------------------------
+# Runtime
+# ----------------------------------------------------------
+ENV PYTHONPATH=/app/src
+
+CMD ["python", "-m", "voxtral_wyoming.server"]

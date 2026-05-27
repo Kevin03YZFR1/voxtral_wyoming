@@ -11,6 +11,7 @@ The goal is to provide a powerful drop-in alternative to the popular Whisper STT
 - 🔌 **Wyoming Protocol**: Full compatibility with Home Assistant Assist
 - 🐳 **Docker Ready**: Containerized deployment with non-root user
 - ⚡ **Device Flexibility**: CPU, CUDA (NVIDIA), or MPS (Apple Silicon) support
+- 🟢 **Blackwell / CUDA 13**: Full compatibility with NVIDIA DGX Spark (sm_120/sm_121)
 - 💬 **Chat Mode** (Gen1 only): Optional chat mode with custom system prompts for domain-specific context
 - 🔤 **Word Replacement**: Post-transcription word/phrase replacement to fix recurring STT mistakes
 
@@ -59,6 +60,24 @@ docker compose up -d
 ```
 
 GPU mode should get enabled automatically, but you can also do so explicitly by setting `DEVICE=cuda` in your `.env` file.
+
+**Blackwell / DGX Spark (CUDA 13):**
+
+For NVIDIA DGX Spark (Blackwell architecture, sm_120/sm_121), use the CUDA 13 build:
+
+1. **Copy the environment template:**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Start the CUDA 13 service:**
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose-cu130.yml up --build -d
+   ```
+
+This uses `Dockerfile.cu130` which is built on `nvcr.io/nvidia/cuda:13.0.1-runtime-ubuntu22.04` and installs PyTorch 2.11 with cu130 support, compatible with Blackwell GPUs. The service listens on port `10301` (configurable via `PORT` in `.env`).
+
+> **Note:** The CUDA 13 build requires CUDA 13-compatible NVIDIA drivers. Check your driver version supports CUDA 13 before using this setup.
 
 **Local Model Files:**
 
@@ -244,6 +263,19 @@ docker compose up --build -d
 docker compose logs -f
 ```
 
+**Updating the CUDA 13 (Blackwell) build:**
+
+```bash
+# Pull the latest changes
+git pull
+
+# Rebuild and restart the CUDA 13 compose setup
+docker compose -f docker-compose.yml -f docker-compose-cu130.yml up --build -d
+
+# View logs to verify the update
+docker compose logs -f
+```
+
 ### Docker (without Docker Compose)
 
 ```bash
@@ -334,6 +366,16 @@ This means your GPU is too old for the installed PyTorch version. **Solution:**
    ```bash
    docker compose up --build -d
    ```
+
+### CUDA 13 / Blackwell Compute Capability Error
+
+If using the CUDA 13 build on DGX Spark (sm_121) and you see a compute capability mismatch:
+```
+Found GPU0 NVIDIA DGX-Spark which is of cuda capability 12.1.
+Minimum and Maximum cuda capability supported by this version of PyTorch is (8.0) - (12.0)
+```
+
+**Solution:** Ensure you are using `Dockerfile.cu130` (not the default Dockerfile) and the `docker-compose-cu130.yml` override. PyTorch 2.11 in the cu130 build natively supports sm_120/sm_121.
 
 ### Connection Issues with Home Assistant
 
